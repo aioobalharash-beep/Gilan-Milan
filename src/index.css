@@ -7,9 +7,9 @@
   --font-lato: "Lato", sans-serif;
   --font-arabic: "IBM Plex Sans Arabic", sans-serif;
 
-  --color-primary-navy: #1C3A2A;
-  --color-secondary-gold: #C8964A;
-  --color-pearl-white: #F2E8D5;
+  --color-primary-navy: #5C3D1E;
+  --color-secondary-gold: #A67C52;
+  --color-pearl-white: #F0EBE4;
 
   --radius-2xl: 1.25rem;
 }
@@ -152,7 +152,7 @@
 
 .printable-invoice .pi-sheet {
   font-family: 'Cairo', 'IBM Plex Sans Arabic', 'Plus Jakarta Sans', sans-serif;
-  color: #1C3A2A;
+  color: #5C3D1E;
   background: #fff;
   width: 210mm;
   min-height: 297mm;
@@ -197,7 +197,7 @@
   font-size: 18px;
   font-weight: 800;
   letter-spacing: 1.5px;
-  color: #1C3A2A;
+  color: #5C3D1E;
 }
 .printable-invoice .pi-brand-tag {
   font-size: 10px;
@@ -211,21 +211,21 @@
 .printable-invoice .pi-title {
   font-size: 32px;
   font-weight: 800;
-  color: #1C3A2A;
+  color: #5C3D1E;
   letter-spacing: 4px;
   line-height: 1;
 }
 .printable-invoice .pi-ref {
   margin-top: 6px;
   font-size: 11px;
-  color: #C8964A;
+  color: #A67C52;
   font-weight: 700;
   letter-spacing: 2px;
 }
 .printable-invoice .pi-header-accent {
   margin-top: 10mm;
   height: 3px;
-  background: linear-gradient(90deg, #1C3A2A 0%, #1C3A2A 65%, #C8964A 65%, #C8964A 100%);
+  background: linear-gradient(90deg, #5C3D1E 0%, #5C3D1E 65%, #A67C52 65%, #A67C52 100%);
   border-radius: 2px;
 }
 
@@ -253,12 +253,12 @@
 .printable-invoice .pi-meta-name {
   font-size: 16px;
   font-weight: 700;
-  color: #1C3A2A;
+  color: #5C3D1E;
 }
 .printable-invoice .pi-meta-value {
   font-size: 14px;
   font-weight: 700;
-  color: #1C3A2A;
+  color: #5C3D1E;
 }
 .printable-invoice .pi-meta-sub {
   font-size: 11px;
@@ -293,11 +293,11 @@
   align-items: baseline;
   gap: 8px;
   font-size: 12px;
-  color: #1C3A2A;
+  color: #5C3D1E;
 }
 .printable-invoice .pi-stay-chip-label {
   font-weight: 700;
-  color: #1C3A2A;
+  color: #5C3D1E;
   letter-spacing: 0.3px;
 }
 .printable-invoice .pi-stay-chip-value {
@@ -310,13 +310,13 @@
   font-weight: 600;
 }
 .printable-invoice .pi-stay-sep {
-  color: #C8964A;
+  color: #A67C52;
   font-weight: 700;
   margin: 0 2px;
 }
 .printable-invoice .pi-stay-time {
   font-weight: 700;
-  color: #1C3A2A;
+  color: #5C3D1E;
   font-variant-numeric: tabular-nums;
 }
 
@@ -331,7 +331,7 @@
   display: flex;
   justify-content: space-between;
   padding: 10px 16px;
-  background: #1C3A2A;
+  background: #5C3D1E;
   color: #fff;
   font-size: 10px;
   font-weight: 700;
@@ -345,7 +345,7 @@
   padding: 12px 16px;
   border-top: 1px solid #f1f5f9;
   font-size: 13px;
-  color: #1C3A2A;
+  color: #5C3D1E;
 }
 .printable-invoice .pi-row:first-of-type {
   border-top: none;
@@ -365,7 +365,7 @@
   justify-content: space-between;
   align-items: baseline;
   padding: 14px 20px;
-  background: #1C3A2A;
+  background: #5C3D1E;
   color: #fff;
   border-radius: 10px;
 }
@@ -378,13 +378,13 @@
 .printable-invoice .pi-total-value {
   font-size: 22px;
   font-weight: 800;
-  color: #C8964A;
+  color: #A67C52;
   font-variant-numeric: tabular-nums;
 }
 .printable-invoice .pi-total-currency {
   font-size: 12px;
   margin: 0 4px;
-  color: #C8964A;
+  color: #A67C52;
   opacity: 0.85;
 }
 
@@ -433,16 +433,16 @@
   margin-top: 6px;
   font-size: 10px;
   font-weight: 700;
-  color: #1C3A2A;
+  color: #5C3D1E;
   text-decoration: none;
   letter-spacing: 0.4px;
 }
 .printable-invoice .pi-footer-location-icon {
-  color: #C8964A;
+  color: #A67C52;
   flex: none;
 }
 .printable-invoice .pi-footer-location-sep {
-  color: #C8964A;
+  color: #A67C52;
   font-weight: 700;
 }
 .printable-invoice .pi-footer-location-ar,
@@ -462,13 +462,13 @@
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 3px;
-  color: #C8964A;
+  color: #A67C52;
   text-transform: uppercase;
 }
 .printable-invoice .pi-terms-title {
   font-size: 30px;
   font-weight: 800;
-  color: #1C3A2A;
+  color: #5C3D1E;
   margin: 4px 0 6px;
   letter-spacing: 1px;
 }
@@ -480,7 +480,7 @@
 .printable-invoice .pi-terms-accent {
   height: 3px;
   width: 80px;
-  background: #C8964A;
+  background: #A67C52;
   border-radius: 2px;
 }
 .printable-invoice .pi-terms-body {
@@ -491,13 +491,13 @@
 .printable-invoice .pi-terms-block {
   break-inside: avoid;
   page-break-inside: avoid;
-  border-inline-start: 3px solid #C8964A;
+  border-inline-start: 3px solid #A67C52;
   padding-inline-start: 12px;
 }
 .printable-invoice .pi-terms-heading {
   font-size: 13px;
   font-weight: 700;
-  color: #1C3A2A;
+  color: #5C3D1E;
   margin: 0 0 4px;
   letter-spacing: 0.3px;
 }

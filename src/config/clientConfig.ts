@@ -55,24 +55,24 @@ export interface ClientConfig {
 }
 
 export const CLIENT_CONFIG: ClientConfig = {
-  chaletName: 'Woody Chalete',
+  chaletName: 'Gilan & Milan Chalet',
   logoPath: '/assets/brand/logo.png',
   theme: {
-    primary: '#1C3A2A',
-    secondary: '#C8964A',
-    background: '#F2E8D5',
+    primary: '#5C3D1E',
+    secondary: '#A67C52',
+    background: '#F0EBE4',
   },
   admin: {
-    email: 'akwakhhwwdyman@gmail.com',
+    email: 'mgilan.om@gmail.com',
     additionalEmails: [],
-    name: 'Woody Chalete Admin',
+    name: 'Gilan & Milan Chalet Admin',
   },
   social: {
-    whatsapp: '96879210323',
-    instagram: 'https://www.instagram.com/wooody_chalete/',
+    whatsapp: '96898885926',
+    instagram: 'https://www.instagram.com/mgilan.om/',
   },
   location: {
-    mapsUrl: 'https://maps.app.goo.gl/Wsnnm9W6nxvyBUcy8',
+    mapsUrl: 'https://maps.app.goo.gl/UxJUhj5t9fqpEre38',
   },
   features: {
     hasIdUpload: false,

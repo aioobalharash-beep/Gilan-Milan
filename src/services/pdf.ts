@@ -149,7 +149,7 @@ function buildInvoiceHtml(
     year: 'numeric',
   });
 
-  const companyName = (invoice.chaletName || (isAr ? 'شاليه وودي' : 'Woody Chalete')).toUpperCase();
+  const companyName = (invoice.chaletName || (isAr ? 'شاليه جيلان وميلان' : 'Gilan & Milan Chalet')).toUpperCase();
   const location = isAr ? 'مسقط، سلطنة عُمان' : 'Muscat, Sultanate of Oman';
   const regInfo = invoice.licenseNumber
     ? (isAr ? `ترخيص سياحي: ${invoice.licenseNumber}` : `Tourism License: ${invoice.licenseNumber}`)
@@ -164,7 +164,7 @@ function buildInvoiceHtml(
   const grandTotalLabel = isAr ? 'الإجمالي العام' : 'Grand Total';
 
   // Translate property name for Arabic
-  const localizedProperty = isAr ? 'شاليه وودي' : invoice.room_type;
+  const localizedProperty = isAr ? 'شاليه جيلان وميلان' : invoice.room_type;
 
   const fmtAmount = (n: number): string => {
     const val = n.toFixed(2);
@@ -215,8 +215,8 @@ function buildInvoiceHtml(
       : logoPath || '';
 
   const footerText = isAr
-    ? 'شاليه وودي  |  سلطنة عُمان  |  هذه فاتورة صادرة آلياً ولا تتطلب توقيعاً'
-    : 'Woody Chalete  |  Sultanate of Oman  |  This is a computer-generated invoice.';
+    ? 'شاليه جيلان وميلان  |  سلطنة عُمان  |  هذه فاتورة صادرة آلياً ولا تتطلب توقيعاً'
+    : 'Gilan & Milan Chalet  |  Sultanate of Oman  |  This is a computer-generated invoice.';
 
   // Build items HTML
   let itemsHtml = '';
@@ -319,7 +319,7 @@ function buildTermsHtml(
   const dir = isAr ? 'rtl' : 'ltr';
   const textStart = isAr ? 'text-right' : 'text-left';
 
-  const companyName = isAr ? 'شاليه وودي' : 'WOODY CHALETE';
+  const companyName = isAr ? 'شاليه جيلان وميلان' : 'GILAN & MILAN CHALET';
   const location = isAr ? 'مسقط، سلطنة عُمان' : 'Muscat, Sultanate of Oman';
   const title = isAr ? 'شروط الإقامة' : 'Terms of Stay';
 
@@ -332,8 +332,8 @@ function buildTermsHtml(
   });
 
   const footerText = isAr
-    ? 'شاليه وودي  |  سلطنة عُمان  |  هذه الوثيقة لأغراض إعلامية فقط.'
-    : 'Woody Chalete  |  Sultanate of Oman  |  This document is for informational purposes.';
+    ? 'شاليه جيلان وميلان  |  سلطنة عُمان  |  هذه الوثيقة لأغراض إعلامية فقط.'
+    : 'Gilan & Milan Chalet  |  Sultanate of Oman  |  This document is for informational purposes.';
 
   // Convert newlines to paragraphs
   const bodyHtml = termsText
