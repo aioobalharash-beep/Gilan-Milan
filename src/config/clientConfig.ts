@@ -80,8 +80,8 @@ export const CLIENT_CONFIG: ClientConfig = {
     hasEvent: false,
   },
   checkInOut: {
-    checkInTime: '14:00',   // 2:00 PM
-    checkOutTime: '11:00',  // 11:00 AM (next day for night stays)
+    checkInTime: '16:00',   // 4:00 PM
+    checkOutTime: '13:00',  // 1:00 PM (next day for night stays)
   },
 };
 

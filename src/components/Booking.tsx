@@ -421,8 +421,9 @@ export const Booking: React.FC = () => {
 
   const stayTotal = priceBreakdown?.total || 0;
   const depositAmount = Number(securityDeposit) || 0;
-  // Deposit is collected at check-in, not upfront. Grand Total = stay only.
-  const grandTotal = stayTotal;
+  // Deposit is collected upfront with the booking — Grand Total includes
+  // the refundable security deposit. It is returned at check-out.
+  const grandTotal = stayTotal + depositAmount;
 
   // Resolve Check-in / Check-out wall-clock times from the timing engine.
   // Day use pivots on the selected day; night stay / event pivot on the
@@ -1117,9 +1118,9 @@ export const Booking: React.FC = () => {
               <div className="flex justify-between items-start text-sm">
                 <div>
                   <span className="text-primary-navy/60 font-medium">{t('booking.securityDeposit')}</span>
-                  <p className="text-[9px] font-bold uppercase tracking-widest text-primary-navy/40 mt-0.5">{t('booking.dueOnArrival')}</p>
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-primary-navy/40 mt-0.5">{t('booking.refundable')}</p>
                 </div>
-                <span className="font-bold text-primary-navy/40">{depositAmount} {t('common.omr')}</span>
+                <span className="font-bold text-primary-navy">{depositAmount} {t('common.omr')}</span>
               </div>
             )}
           </div>
@@ -1469,9 +1470,9 @@ export const Booking: React.FC = () => {
         </button>
         {depositAmount > 0 && (
           <div className="flex items-center justify-center gap-2 rounded-xl border border-secondary-gold/30 bg-secondary-gold/5 px-4 py-2.5">
-            <AlertCircle size={14} className="text-secondary-gold flex-shrink-0" />
+            <ShieldCheck size={14} className="text-secondary-gold flex-shrink-0" />
             <p className="text-xs font-medium text-primary-navy text-center leading-snug">
-              {t('booking.depositOnArrival', { amount: depositAmount })}
+              {t('booking.depositRefundable', { amount: depositAmount })}
             </p>
           </div>
         )}

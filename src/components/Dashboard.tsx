@@ -9,7 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { collection, query, orderBy, where, onSnapshot, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { formatTime } from '../services/pricingUtils';
-import { enableAdminPushNotifications, onForegroundPush, isPushConfigured } from '../services/pushNotifications';
+import { enableAdminPushNotifications, onForegroundPush, isPushConfigured, isIosNeedsHomeScreen } from '../services/pushNotifications';
 import { useProperty } from '../contexts/PropertyContext';
 
 interface DashboardData {
@@ -295,28 +295,39 @@ export const Dashboard: React.FC = () => {
       </motion.section>
 
       {pushStatus !== 'granted' && pushStatus !== 'unsupported' && pushStatus !== 'not-configured' && (
-        <motion.div
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-primary-navy text-white rounded-2xl p-5 flex items-center gap-4 shadow-lg"
-        >
-          <div className="w-10 h-10 rounded-full bg-secondary-gold/20 flex items-center justify-center flex-shrink-0">
-            <Bell size={18} className="text-secondary-gold" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-bold text-sm">Get instant booking alerts</p>
-            <p className="text-[11px] text-white/60 font-medium">
-              {pushError ? pushError : 'Allow notifications so new bookings ping your phone even when the app is closed.'}
-            </p>
-          </div>
-          <button
-            onClick={handleEnablePush}
-            disabled={pushBusy || pushStatus === 'denied'}
-            className="bg-secondary-gold text-primary-navy px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest active:scale-95 transition-all disabled:opacity-50 flex-shrink-0"
-          >
-            {pushBusy ? '…' : pushStatus === 'denied' ? 'Blocked' : 'Enable'}
-          </button>
-        </motion.div>
+        (() => {
+          const needsHomeScreen = isIosNeedsHomeScreen();
+          return (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-primary-navy text-white rounded-2xl p-5 flex items-center gap-4 shadow-lg"
+            >
+              <div className="w-10 h-10 rounded-full bg-secondary-gold/20 flex items-center justify-center flex-shrink-0">
+                <Bell size={18} className="text-secondary-gold" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-sm">Get instant booking alerts</p>
+                <p className="text-[11px] text-white/60 font-medium">
+                  {pushError
+                    ? pushError
+                    : needsHomeScreen
+                      ? 'On iPhone, push needs the app installed to the Home Screen first: open the Share menu → Add to Home Screen, then re-open from the icon and tap Enable.'
+                      : 'Allow notifications so new bookings ping your phone even when the app is closed.'}
+                </p>
+              </div>
+              {!needsHomeScreen && (
+                <button
+                  onClick={handleEnablePush}
+                  disabled={pushBusy || pushStatus === 'denied'}
+                  className="bg-secondary-gold text-primary-navy px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest active:scale-95 transition-all disabled:opacity-50 flex-shrink-0"
+                >
+                  {pushBusy ? '…' : pushStatus === 'denied' ? 'Blocked' : 'Enable'}
+                </button>
+              )}
+            </motion.div>
+          );
+        })()
       )}
 
       {pushStatus === 'granted' && (

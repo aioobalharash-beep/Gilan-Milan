@@ -198,6 +198,7 @@
     "securityDeposit": "Security Deposit",
     "grandTotal": "Grand Total",
     "depositOnArrival": "Security Deposit of {{amount}} OMR is required upon check-in.",
+    "depositRefundable": "A refundable security deposit of {{amount}} OMR is included in your total and returned at check-out.",
     "dueOnArrival": "Due on arrival",
     "selectedRange": "Selected range includes unavailable dates",
     "stay": "Stay",

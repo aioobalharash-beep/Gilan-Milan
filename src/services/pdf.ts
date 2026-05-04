@@ -385,7 +385,8 @@ export async function generateInvoicePDF(
 export async function downloadInvoicePDF(invoice: InvoiceData, lang = 'en') {
   try {
     const doc = await generateInvoicePDF(invoice, lang);
-    doc.save(`Al-Malak-Chalet-Invoice-${invoice.id.slice(0, 8).toUpperCase()}.pdf`);
+    const filenameStem = (invoice.chaletName || 'Chalet').replace(/[^A-Za-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'Chalet';
+    doc.save(`${filenameStem}-Invoice-${invoice.id.slice(0, 8).toUpperCase()}.pdf`);
   } catch (err) {
     console.error('[PDF] Failed to download invoice PDF:', err);
     alert(
