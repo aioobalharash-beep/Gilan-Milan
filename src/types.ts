@@ -67,14 +67,31 @@ export interface Booking {
   created_at: string;
 }
 
+export interface PropertyImage {
+  url: string;
+  label?: string;
+}
+
 export interface Property {
   id: string;
-  name: string;
+  /**
+   * Display name. Stored as a bilingual `{ en, ar }` object for new
+   * multi-property records, but legacy/single-property data uses a plain
+   * string — both shapes are accepted at the boundary and normalised by the
+   * UI via `bl()` from `utils/bilingual`.
+   */
+  name: string | { en: string; ar: string };
   type: string;
   capacity: number;
   area_sqm: number;
   nightly_rate: number;
   security_deposit: number;
   description: string;
+  /** Hero/preview gallery shown in the toggle and on the main page. */
+  images?: PropertyImage[];
+  /** Quick amenity list rendered as chips on the main page. */
+  amenities?: string[];
+  /** External calendar identifier (iCal/Google Calendar) for sync. */
+  calendarSyncId?: string;
   status: string;
 }

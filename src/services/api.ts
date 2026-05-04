@@ -122,6 +122,10 @@ export const reportsApi = {
 export const propertiesApi = {
   list: () => firestoreProperties.list() as Promise<any[]>,
   get: (id: string) => firestoreProperties.get(id),
+  create: (data: Parameters<typeof firestoreProperties.create>[0]) => firestoreProperties.create(data),
+  update: (id: string, patch: Record<string, any>) => firestoreProperties.update(id, patch),
+  getDetails: (id: string) => firestoreProperties.getDetails(id),
+  updateDetails: (id: string, patch: Record<string, any>) => firestoreProperties.updateDetails(id, patch),
   checkAvailability: async (id: string, checkIn: string, checkOut: string) => {
     const bookings = await firestoreBookings.list();
     const conflict = bookings.find(b =>

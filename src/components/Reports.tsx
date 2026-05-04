@@ -2,11 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { Banknote, TrendingUp, Moon, Download, Calendar as CalendarIcon, Search, FileBarChart } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { collection, query, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { collection, query, orderBy, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { generatePerformanceReportPDF } from '../services/performanceReport';
 import { useTranslation } from 'react-i18next';
 import { getClientConfig } from '../config/clientConfig';
+import { useProperty } from '../contexts/PropertyContext';
+import { propertyDetailsDocId } from '../services/firestore';
 
 interface RealtimeBooking {
   id: string;
@@ -37,18 +39,30 @@ export const Reports: React.FC = () => {
   const [generating, setGenerating] = useState(false);
   const [licenseNumber, setLicenseNumber] = useState('');
 
-  useEffect(() => {
-    getDoc(doc(db, 'settings', 'property_details'))
-      .then(snap => {
-        if (snap.exists() && snap.data().licenseNumber) {
-          setLicenseNumber(snap.data().licenseNumber);
-        }
-      })
-      .catch(console.error);
-  }, []);
+  const { activePropertyId } = useProperty();
 
   useEffect(() => {
-    const q = query(collection(db, 'bookings'), orderBy('created_at', 'desc'));
+    if (!activePropertyId) return;
+    const apply = (data: any) => {
+      if (data.licenseNumber) setLicenseNumber(data.licenseNumber);
+    };
+    getDoc(doc(db, 'settings', propertyDetailsDocId(activePropertyId)))
+      .then(async snap => {
+        if (snap.exists()) { apply(snap.data()); return; }
+        const legacy = await getDoc(doc(db, 'settings', 'property_details'));
+        if (legacy.exists()) apply(legacy.data());
+      })
+      .catch(console.error);
+  }, [activePropertyId]);
+
+  useEffect(() => {
+    if (!activePropertyId) return;
+    setLoading(true);
+    const q = query(
+      collection(db, 'bookings'),
+      where('property_id', '==', activePropertyId),
+      orderBy('created_at', 'desc'),
+    );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as RealtimeBooking));
       setAllBookings(data);
@@ -58,7 +72,7 @@ export const Reports: React.FC = () => {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, [activePropertyId]);
 
   const handleGenerate = () => {
     if (!startDate || !endDate) return;

@@ -5,6 +5,8 @@ import { cn } from '@/src/lib/utils';
 import { testimonialsApi } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useProperty } from '../contexts/PropertyContext';
+import { bl } from '../utils/bilingual';
 
 interface Testimonial {
   id?: string;
@@ -19,7 +21,13 @@ interface Testimonial {
 
 export const Testimonials: React.FC = () => {
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const { activeProperty } = useProperty();
+  // Tag testimonials with the chalet that the guest is currently viewing so the
+  // admin can filter feedback per property.
+  const propertyName = activeProperty
+    ? bl(activeProperty.name as any, i18n.language) || activeProperty.id
+    : 'Gilan & Milan Chalet';
   const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -28,12 +36,17 @@ export const Testimonials: React.FC = () => {
   const [form, setForm] = useState({
     guest_name: '',
     guest_phone: '',
-    property_name: 'Woody Chalete',
+    property_name: propertyName,
     rating: 0,
     text: '',
     stay_details: '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Keep the form's property_name in sync if the user toggles property mid-form.
+  useEffect(() => {
+    setForm(prev => ({ ...prev, property_name: propertyName }));
+  }, [propertyName]);
 
   useEffect(() => {
     testimonialsApi.list()
@@ -61,7 +74,7 @@ export const Testimonials: React.FC = () => {
       setTestimonials(prev => [newT as Testimonial, ...prev]);
       setSubmitted(true);
       setShowForm(false);
-      setForm({ guest_name: '', guest_phone: '', property_name: 'Woody Chalete', rating: 0, text: '', stay_details: '' });
+      setForm({ guest_name: '', guest_phone: '', property_name: propertyName, rating: 0, text: '', stay_details: '' });
     } catch (err) {
       console.error('Failed to submit:', err);
     } finally {

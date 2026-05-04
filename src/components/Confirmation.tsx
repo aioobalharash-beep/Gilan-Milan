@@ -8,6 +8,8 @@ import { db } from '../services/firebase';
 import { useTranslation } from 'react-i18next';
 import { getClientConfig } from '../config/clientConfig';
 import { formatTime } from '../services/pricingUtils';
+import { useProperty } from '../contexts/PropertyContext';
+import { propertyDetailsDocId } from '../services/firestore';
 
 export const Confirmation: React.FC = () => {
   const navigate = useNavigate();
@@ -16,7 +18,14 @@ export const Confirmation: React.FC = () => {
   const state = location.state as { booking?: any; propertyName?: string } | null;
 
   const booking = state?.booking;
-  const propertyName = state?.propertyName || 'Woody Chalete';
+  // Booking-attached property name wins over the active toggle so a freshly
+  // submitted booking is always shown under its own chalet.
+  const { activeProperty, activePropertyId } = useProperty();
+  const propertyName = state?.propertyName
+    || (typeof activeProperty?.name === 'string'
+      ? activeProperty.name
+      : (activeProperty?.name as any)?.[i18n.language] || (activeProperty?.name as any)?.en)
+    || 'Gilan & Milan Chalet';
 
   const [bankPhone, setBankPhone] = useState('');
   const [licenseNumber, setLicenseNumber] = useState('');
@@ -28,18 +37,25 @@ export const Confirmation: React.FC = () => {
     }
   }, [booking, navigate]);
 
-  // Load property details from Firestore (bankPhone for bank transfers, licenseNumber for PDFs)
+  // Load property details from Firestore (bankPhone for bank transfers,
+  // licenseNumber for PDFs). Prefer the booking's property if known,
+  // otherwise the active toggle, with legacy fallback.
   useEffect(() => {
     if (!booking) return;
-    getDoc(doc(db, 'settings', 'property_details'))
-      .then(snap => {
-        if (!snap.exists()) return;
-        const data = snap.data();
-        if (data.bankPhone) setBankPhone(data.bankPhone);
-        if (data.licenseNumber) setLicenseNumber(data.licenseNumber);
+    const propertyId = booking.property_id || activePropertyId;
+    if (!propertyId) return;
+    const apply = (data: any) => {
+      if (data.bankPhone) setBankPhone(data.bankPhone);
+      if (data.licenseNumber) setLicenseNumber(data.licenseNumber);
+    };
+    getDoc(doc(db, 'settings', propertyDetailsDocId(propertyId)))
+      .then(async snap => {
+        if (snap.exists()) { apply(snap.data()); return; }
+        const legacy = await getDoc(doc(db, 'settings', 'property_details'));
+        if (legacy.exists()) apply(legacy.data());
       })
       .catch(console.error);
-  }, [booking]);
+  }, [booking, activePropertyId]);
 
   if (!booking) return null;
 
@@ -53,7 +69,15 @@ export const Confirmation: React.FC = () => {
   const isDayUse = booking.check_in === booking.check_out;
   const lang = i18n.language;
   const isFullDay = isDayUse && (!booking.slot_name || /full\s*day/i.test(booking.slot_name));
-  const localizedProperty = lang === 'ar' ? 'شاليه وودي' : propertyName;
+  // Prefer the property record's localized name when we have an active
+  // property; otherwise fall back to the booking-attached name.
+  const localizedProperty = (() => {
+    const name = activeProperty?.name;
+    if (name && typeof name === 'object') {
+      return (name as any)[lang] || (name as any).en || propertyName;
+    }
+    return propertyName;
+  })();
 
   const stayLabel = (() => {
     if (isDayUse) {
@@ -255,7 +279,7 @@ export const Confirmation: React.FC = () => {
             <button onClick={() => navigate('/about')} className="text-[10px] text-primary-navy/40 underline font-bold uppercase tracking-widest">{t('sanctuary.aboutUs')}</button>
           </div>
           <p className="text-[9px] text-primary-navy/25 font-bold uppercase tracking-widest">
-            &copy; Woody Chalete. 2024
+            &copy; {localizedProperty}. {new Date().getFullYear()}
           </p>
         </div>
       </motion.div>

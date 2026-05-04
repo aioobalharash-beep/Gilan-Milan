@@ -4,9 +4,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, BarChart3, ChevronRight as ChevronRightIcon, ArrowUpRight, TrendingUp, TrendingDown, X } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useTranslation } from 'react-i18next';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { formatTime } from '../services/pricingUtils';
+import { useProperty } from '../contexts/PropertyContext';
 
 interface RealtimeBooking {
   id: string;
@@ -174,9 +175,17 @@ export const Calendar: React.FC = () => {
   today.setHours(0, 0, 0, 0);
   const todayDay = today.getMonth() === currentMonth && today.getFullYear() === currentYear ? today.getDate() : -1;
 
-  // Real-time listener on bookings
+  // Real-time listener on bookings — scoped to the active property so the
+  // admin calendar shows only that chalet's reservations.
+  const { activePropertyId } = useProperty();
   useEffect(() => {
-    const q = query(collection(db, 'bookings'), orderBy('created_at', 'desc'));
+    if (!activePropertyId) return;
+    setLoading(true);
+    const q = query(
+      collection(db, 'bookings'),
+      where('property_id', '==', activePropertyId),
+      orderBy('created_at', 'desc'),
+    );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as RealtimeBooking));
       setBookings(data);
@@ -186,7 +195,7 @@ export const Calendar: React.FC = () => {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, [activePropertyId]);
 
   // Derive recent transactions from bookings: only paid, non-cancelled, latest 4
   const recentTransactions = useMemo(() =>

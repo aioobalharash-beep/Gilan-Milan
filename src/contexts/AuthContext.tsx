@@ -30,6 +30,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser) {
+        // Build a baseline profile from Firebase Auth alone so a Firestore
+        // permission denial (rules out of date) or missing profile doc never
+        // logs an authenticated user out of the app.
+        const fallbackProfile: User = {
+          id: fbUser.uid,
+          name: fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
+          email: fbUser.email || '',
+          role: isAdminEmail(fbUser.email) ? 'admin' : 'client',
+          phone: fbUser.phoneNumber || '',
+        };
         try {
           const profile = (await authApi.me(fbUser.uid)) as User | null;
           if (profile) {
@@ -37,12 +47,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const role = profile.role === 'admin' || isAdminEmail(profile.email)
               ? 'admin'
               : profile.role;
-            setUser({ ...profile, role });
+            setUser({ ...profile, id: fbUser.uid, role });
           } else {
-            setUser(null);
+            setUser(fallbackProfile);
           }
         } catch {
-          setUser(null);
+          setUser(fallbackProfile);
         }
       } else {
         setUser(null);

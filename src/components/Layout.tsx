@@ -23,6 +23,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useTranslation } from 'react-i18next';
 import { notificationsApi } from '../services/api';
 import { LanguageToggle } from './LanguageToggle';
+import { PropertyToggle } from './PropertyToggle';
 import { BrandMark } from './BrandMark';
 import { Footer } from './Footer';
 
@@ -263,6 +264,8 @@ export const Layout: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-4">
+            {/* Active property selector — scopes admin views (calendar, bookings, edit) to one chalet */}
+            <PropertyToggle variant="light" />
             <div className="relative" ref={notifRef}>
               <button
                 onClick={() => setShowNotifications(!showNotifications)}

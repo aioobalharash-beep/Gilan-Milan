@@ -5,6 +5,7 @@ import { cn } from '@/src/lib/utils';
 import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { LanguageToggle } from './LanguageToggle';
+import { PropertyToggle } from './PropertyToggle';
 import { Footer } from './Footer';
 
 export const ClientLayout: React.FC = () => {
@@ -40,6 +41,7 @@ export const ClientLayout: React.FC = () => {
           {t('common.alMalak')}
         </Link>
         <div className="flex items-center gap-3">
+          <PropertyToggle variant="light" />
           <LanguageToggle />
           {isAdmin && (
             <button

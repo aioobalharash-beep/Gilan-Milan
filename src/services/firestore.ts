@@ -34,6 +34,10 @@ const notificationsCol = () => collection(db, 'notifications');
 
 let seedInitialized = false;
 
+// IDs for the two seeded chalets. Kept as constants because the
+// per-property settings doc id is derived from these (settings/property_details_{id}).
+export const DEFAULT_PROPERTY_IDS = ['gilan', 'milan'] as const;
+
 export async function ensureSeedData() {
   if (seedInitialized) return;
   seedInitialized = true;
@@ -43,12 +47,44 @@ export async function ensureSeedData() {
   const propertiesSnap = await getDocs(propertiesCol());
   if (propertiesSnap.size > 0) return;
 
-  // Seed properties
+  // Seed properties — two chalets managed under one app instance.
   const properties = [
-    { id: 'p1', name: 'Woody Chalete', type: 'Luxury Chalet', capacity: 12, area_sqm: 850, nightly_rate: 120, security_deposit: 50, description: 'Premium luxury chalet', status: 'active' },
-    { id: 'p2', name: 'Al-Bustan Villa', type: 'Deluxe Villa', capacity: 8, area_sqm: 620, nightly_rate: 180, security_deposit: 75, description: 'Exclusive beachfront villa', status: 'active' },
-    { id: 'p3', name: 'Royal Suite A', type: 'Royal Suite', capacity: 4, area_sqm: 320, nightly_rate: 250, security_deposit: 100, description: 'Opulent royal suite with private pool', status: 'active' },
-    { id: 'p4', name: 'Coast View Chalet', type: 'Ocean Chalet', capacity: 6, area_sqm: 480, nightly_rate: 150, security_deposit: 60, description: 'Stunning ocean view chalet', status: 'active' },
+    {
+      id: 'gilan',
+      name: { en: 'Gilan Chalet', ar: 'شاليه جيلان' },
+      type: 'Luxury Chalet',
+      capacity: 10,
+      area_sqm: 750,
+      nightly_rate: 120,
+      security_deposit: 50,
+      description: 'A serene retreat where modern luxury meets Omani heritage.',
+      images: [
+        { url: 'https://picsum.photos/seed/gilan-1/800/1000', label: 'Gilan: Master Suite' },
+        { url: 'https://picsum.photos/seed/gilan-2/800/1000', label: 'Gilan: Pool Deck' },
+        { url: 'https://picsum.photos/seed/gilan-3/800/1000', label: 'Gilan: Lounge' },
+      ],
+      amenities: ['Private Pool', 'Outdoor Majlis', 'Smart TV', 'Wi-Fi', 'BBQ Area'],
+      calendarSyncId: 'gilan-cal-001',
+      status: 'active',
+    },
+    {
+      id: 'milan',
+      name: { en: 'Milan Chalet', ar: 'شاليه ميلان' },
+      type: 'Luxury Chalet',
+      capacity: 12,
+      area_sqm: 900,
+      nightly_rate: 140,
+      security_deposit: 60,
+      description: 'A spacious chalet designed for gatherings, with curated indoor and outdoor spaces.',
+      images: [
+        { url: 'https://picsum.photos/seed/milan-1/800/1000', label: 'Milan: Garden View' },
+        { url: 'https://picsum.photos/seed/milan-2/800/1000', label: 'Milan: Living Wing' },
+        { url: 'https://picsum.photos/seed/milan-3/800/1000', label: 'Milan: Outdoor Terrace' },
+      ],
+      amenities: ['Private Pool', 'Game Room', 'Smart TV', 'Wi-Fi', 'Outdoor Cinema'],
+      calendarSyncId: 'milan-cal-001',
+      status: 'active',
+    },
   ];
   for (const p of properties) {
     const { id, ...data } = p;
@@ -105,39 +141,56 @@ const mapAuthError = (err: any): Error => {
 
 export const firestoreUsers = {
   async login(email: string, password: string): Promise<{ user: AppUser }> {
+    let credential;
     try {
-      const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
-      const fbUser = credential.user;
+      credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+    } catch (err) {
+      // Auth failed — let the form surface a friendly message.
+      throw mapAuthError(err);
+    }
 
-      const profileRef = doc(db, 'users', fbUser.uid);
+    const fbUser = credential.user;
+
+    // Build the profile we'd want from auth + the email allowlist alone, so
+    // that authentication isn't held hostage by Firestore rules being out of
+    // date or by the brief window where the auth token hasn't propagated to
+    // Firestore yet (the latter manifests as "Missing or insufficient
+    // permissions" on the very first read after sign-in).
+    const fallbackProfile: Omit<AppUser, 'id'> = {
+      name: fbUser.displayName || email.split('@')[0],
+      email: fbUser.email || email,
+      role: isAdminEmail(fbUser.email) ? 'admin' : 'client',
+      phone: fbUser.phoneNumber || '',
+    };
+
+    const profileRef = doc(db, 'users', fbUser.uid);
+    let profile: Omit<AppUser, 'id'> = fallbackProfile;
+
+    try {
       const profileSnap = await getDoc(profileRef);
-
-      let profile: Omit<AppUser, 'id'>;
       if (profileSnap.exists()) {
         const data = profileSnap.data();
         profile = {
-          name: data.name || fbUser.displayName || email.split('@')[0],
-          email: data.email || fbUser.email || email,
-          role: (data.role as UserRole) || (isAdminEmail(fbUser.email) ? 'admin' : 'client'),
-          phone: data.phone || fbUser.phoneNumber || '',
+          name: data.name || fallbackProfile.name,
+          email: data.email || fallbackProfile.email,
+          role: (data.role as UserRole) || fallbackProfile.role,
+          phone: data.phone || fallbackProfile.phone,
         };
       } else {
-        profile = {
-          name: fbUser.displayName || email.split('@')[0],
-          email: fbUser.email || email,
-          role: isAdminEmail(fbUser.email) ? 'admin' : 'client',
-          phone: fbUser.phoneNumber || '',
-        };
-        await setDoc(profileRef, {
-          ...profile,
-          created_at: new Date().toISOString(),
-        });
+        // Fire-and-forget write — login must succeed even if rules block this.
+        setDoc(profileRef, { ...fallbackProfile, created_at: new Date().toISOString() })
+          .catch(writeErr => console.warn('User profile create blocked by rules:', writeErr));
       }
-
-      return { user: { id: fbUser.uid, ...profile } };
-    } catch (err) {
-      throw mapAuthError(err);
+    } catch (readErr) {
+      // Most commonly "Missing or insufficient permissions" if the rules
+      // file in firestore.rules has not been deployed to the Firebase
+      // project yet. We don't surface this to the user — they're already
+      // authenticated via Firebase Auth and the app can run on the fallback
+      // profile (admin role is decided by the email allowlist regardless).
+      console.warn('User profile read failed; using fallback profile:', readErr);
     }
+
+    return { user: { id: fbUser.uid, ...profile } };
   },
 
   async register(data: {
@@ -172,20 +225,35 @@ export const firestoreUsers = {
   },
 
   async getById(id: string): Promise<AppUser | null> {
-    const snap = await getDoc(doc(db, 'users', id));
-    if (!snap.exists()) return null;
-    const data = snap.data();
-    return {
-      id: snap.id,
-      name: data.name,
-      email: data.email,
-      role: (data.role as UserRole) || 'client',
-      phone: data.phone,
-    };
+    try {
+      const snap = await getDoc(doc(db, 'users', id));
+      if (!snap.exists()) return null;
+      const data = snap.data();
+      return {
+        id: snap.id,
+        name: data.name,
+        email: data.email,
+        role: (data.role as UserRole) || 'client',
+        phone: data.phone,
+      };
+    } catch (err) {
+      // Treat permission errors (e.g. rules out of date) as "no profile yet"
+      // so AuthContext can rebuild the user from Firebase Auth instead of
+      // forcing a logout.
+      console.warn('User profile read failed:', err);
+      return null;
+    }
   },
 };
 
 // ── Properties ──
+
+// Per-property editable settings live in `settings/property_details_{propertyId}`.
+// A legacy single-property deployment may still have `settings/property_details`,
+// which we treat as a read-only fallback. Helper exposed so other modules can
+// build the same ref without duplicating the naming convention.
+export const propertyDetailsDocId = (propertyId: string) =>
+  `property_details_${propertyId}`;
 
 export const firestoreProperties = {
   async list() {
@@ -202,17 +270,64 @@ export const firestoreProperties = {
     return { id: snap.id, ...snap.data() };
   },
 
-  // ── Property details (settings/property_details) ──
-  // Single-document store backing the public site and the Edit Property admin screen.
-  // Accepts any long-form fields (aboutEn, aboutAr, termsOfStay, footerText, description, etc.)
-  // and merges them without clobbering unrelated keys.
-  async getDetails(): Promise<Record<string, any> | null> {
-    const snap = await getDoc(doc(db, 'settings', 'property_details'));
-    return snap.exists() ? (snap.data() as Record<string, any>) : null;
+  // Create a new property record. Used by the admin "Add New Property" flow.
+  // The property doc holds the toggle-facing identity (name, images, amenities,
+  // calendarSyncId); long-form editable content lives in the per-property
+  // settings doc.
+  async create(data: {
+    id?: string;
+    name: string | Record<string, string>;
+    type?: string;
+    capacity?: number;
+    area_sqm?: number;
+    nightly_rate?: number;
+    security_deposit?: number;
+    description?: string;
+    images?: { url: string; label?: string }[];
+    amenities?: string[];
+    calendarSyncId?: string;
+  }) {
+    const id = data.id || `p_${Date.now()}`;
+    const record = {
+      name: data.name,
+      type: data.type || 'Chalet',
+      capacity: data.capacity ?? 8,
+      area_sqm: data.area_sqm ?? 600,
+      nightly_rate: data.nightly_rate ?? 100,
+      security_deposit: data.security_deposit ?? 50,
+      description: data.description || '',
+      images: data.images || [],
+      amenities: data.amenities || [],
+      calendarSyncId: data.calendarSyncId || `${id}-cal-001`,
+      status: 'active',
+      created_at: new Date().toISOString(),
+    };
+    await setDoc(doc(db, 'properties', id), record);
+    return { id, ...record };
   },
 
-  async updateProperty(patch: Record<string, any>) {
-    await setDoc(doc(db, 'settings', 'property_details'), patch, { merge: true });
+  async update(id: string, patch: Record<string, any>) {
+    await setDoc(doc(db, 'properties', id), patch, { merge: true });
+  },
+
+  // ── Per-property details ──
+  // Each property has its own editable settings doc that backs the public site
+  // and the Edit Property admin screen for that property. Accepts any long-form
+  // field (gallery, pricing, bank details, aboutEn, termsOfStay, footerText, …)
+  // and merges without clobbering unrelated keys.
+  async getDetails(propertyId: string): Promise<Record<string, any> | null> {
+    if (!propertyId) return null;
+    const perPropertyRef = doc(db, 'settings', propertyDetailsDocId(propertyId));
+    const perPropertySnap = await getDoc(perPropertyRef);
+    if (perPropertySnap.exists()) return perPropertySnap.data() as Record<string, any>;
+    // Backwards-compat read from legacy single doc; never written to.
+    const legacy = await getDoc(doc(db, 'settings', 'property_details'));
+    return legacy.exists() ? (legacy.data() as Record<string, any>) : null;
+  },
+
+  async updateDetails(propertyId: string, patch: Record<string, any>) {
+    if (!propertyId) throw new Error('propertyId is required to update property details');
+    await setDoc(doc(db, 'settings', propertyDetailsDocId(propertyId)), patch, { merge: true });
   },
 };
 

@@ -216,7 +216,7 @@ function drawFooter(doc: jsPDF, pw: number, ph: number) {
   doc.setFontSize(7);
   doc.setTextColor(160);
   doc.text(
-    'Woody Chalete: This is a computer-generated performance report.',
+    `${data.chaletName || 'Gilan & Milan Chalet'}: This is a computer-generated performance report.`,
     pw / 2, footerY, { align: 'center' }
   );
 }
