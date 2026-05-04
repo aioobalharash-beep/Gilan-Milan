@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { useTranslation } from 'react-i18next';
 import { OptimizedImage } from './OptimizedImage';
-import { ArrowLeft, ArrowRight, Upload, X, Plus, Save, Check, Calendar, Tag, Percent, Landmark, Sun, Clock, FileText, Languages, Trash2, LayoutGrid } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Upload, X, Plus, Save, Check, Calendar, Tag, Percent, Landmark, Sun, Clock, FileText, Languages, Trash2, LayoutGrid, AlertCircle } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -13,7 +13,7 @@ import { bl, type BilingualField, toBilingual } from '../utils/bilingual';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useProperty } from '../contexts/PropertyContext';
 import { getClientConfig } from '../config/clientConfig';
-import { propertyDetailsDocId } from '../services/firestore';
+import { propertyDetailsDocId, firestoreUsers } from '../services/firestore';
 import { propertiesApi } from '../services/api';
 
 interface GalleryImage { url: string; label: string; }
@@ -135,6 +135,7 @@ const PropertyEditorComponent: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [newLabel, setNewLabel] = useState('');
@@ -230,26 +231,72 @@ const PropertyEditorComponent: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePropertyId]);
 
+  const persistForm = async () => {
+    // Per-property settings doc holds long-form editor content.
+    await setDoc(doc(db, 'settings', propertyDetailsDocId(activePropertyId!)), form);
+    // Mirror toggle-facing fields back onto the property record so the
+    // PropertyToggle and Sanctuary header reflect saved name/gallery edits.
+    await propertiesApi.update(activePropertyId!, {
+      name: form.name,
+      capacity: form.capacity,
+      area_sqm: form.area_sqm,
+      nightly_rate: form.nightly_rate,
+      description: bl(form.description as any, 'en'),
+      images: form.gallery.map(g => ({ url: g.url, label: g.label || '' })),
+    });
+  };
+
   const handleSave = async () => {
-    if (!activePropertyId) return;
+    if (!activePropertyId) {
+      setSaveError(t('propertyEditor.noPropertySelected', 'Pick a property before saving.'));
+      return;
+    }
     setSaving(true);
+    setSaveError(null);
     try {
-      // Per-property settings doc.
-      await setDoc(doc(db, 'settings', propertyDetailsDocId(activePropertyId)), form);
-      // Mirror toggle-facing fields back onto the property record so the
-      // PropertyToggle and Sanctuary header reflect saved name/gallery edits.
-      await propertiesApi.update(activePropertyId, {
-        name: form.name,
-        capacity: form.capacity,
-        area_sqm: form.area_sqm,
-        nightly_rate: form.nightly_rate,
-        description: bl(form.description as any, 'en'),
-        images: form.gallery.map(g => ({ url: g.url, label: g.label || '' })),
-      });
+      await persistForm();
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to save:', err);
+      const code: string = err?.code || '';
+      const message: string = err?.message || '';
+      const isPermissionDenied = code === 'permission-denied'
+        || /missing or insufficient permissions/i.test(message);
+
+      if (isPermissionDenied) {
+        // Most likely cause: the admin's Firestore profile doc is missing or
+        // doesn't have role='admin', so isAdmin() in the rules denies the
+        // settings write. Auto-heal by upserting the profile (idempotent),
+        // then retry the save once.
+        const healed = await firestoreUsers.ensureProfile();
+        if (healed) {
+          try {
+            await persistForm();
+            setSaved(true);
+            setTimeout(() => setSaved(false), 3000);
+            return;
+          } catch (retryErr: any) {
+            console.error('Save retry failed:', retryErr);
+            setSaveError(
+              t(
+                'propertyEditor.savePermissionDenied',
+                'Save was blocked by the database. Make sure the latest Firestore rules are deployed and that you are signed in with an admin email.',
+              ),
+            );
+            return;
+          }
+        }
+        setSaveError(
+          t(
+            'propertyEditor.savePermissionDenied',
+            'Save was blocked by the database. Make sure the latest Firestore rules are deployed and that you are signed in with an admin email.',
+          ),
+        );
+        return;
+      }
+
+      setSaveError(message || t('propertyEditor.saveFailed', 'Failed to save changes. Please try again.'));
     } finally {
       setSaving(false);
     }
@@ -1359,15 +1406,27 @@ const PropertyEditorComponent: React.FC = () => {
       </section>
 
       {/* Save */}
-      <div className="flex justify-end gap-3 pt-2">
+      <div className="flex flex-col sm:flex-row sm:justify-end items-stretch sm:items-center gap-3 pt-2">
         <AnimatePresence>
-          {saved && (
+          {saveError && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              role="alert"
+              className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 text-xs font-medium rounded-xl px-3 py-2.5 sm:max-w-md leading-relaxed"
+            >
+              <AlertCircle size={14} className="mt-0.5 shrink-0" />
+              <span>{saveError}</span>
+            </motion.div>
+          )}
+          {saved && !saveError && (
             <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} className="flex items-center gap-2 text-emerald-600 text-sm font-bold">
               <Check size={16} /> {t('propertyEditor.changesSaved')}
             </motion.div>
           )}
         </AnimatePresence>
-        <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 bg-primary-navy text-white px-8 py-3.5 rounded-xl font-bold text-xs uppercase tracking-widest active:scale-[0.98] transition-all disabled:opacity-60 shadow-lg shadow-primary-navy/20">
+        <button onClick={handleSave} disabled={saving} className="flex items-center justify-center gap-2 bg-primary-navy text-white px-8 py-3.5 rounded-xl font-bold text-xs uppercase tracking-widest active:scale-[0.98] transition-all disabled:opacity-60 shadow-lg shadow-primary-navy/20">
           {saving ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save size={16} />}
           {saving ? t('propertyEditor.saving') : t('propertyEditor.saveChanges')}
         </button>
