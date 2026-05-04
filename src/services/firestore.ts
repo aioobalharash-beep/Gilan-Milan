@@ -140,6 +140,40 @@ const mapAuthError = (err: any): Error => {
 };
 
 export const firestoreUsers = {
+  /**
+   * Idempotent: ensures the signed-in user's profile doc exists with the
+   * correct role. Safe to call repeatedly — uses merge so it never clobbers
+   * other profile fields. Returns true if the doc is now in a usable state,
+   * false if the write was denied (e.g. rules out of date).
+   *
+   * The Firestore rules gate admin-only collections (settings, invoices,
+   * bookings reads, etc) on `users/{uid}.role == 'admin'`, so without this
+   * doc an authenticated admin still appears unprivileged to Firestore.
+   */
+  async ensureProfile(): Promise<boolean> {
+    const fbUser = auth.currentUser;
+    if (!fbUser) return false;
+    const isAdmin = isAdminEmail(fbUser.email);
+    const profileRef = doc(db, 'users', fbUser.uid);
+    try {
+      await setDoc(
+        profileRef,
+        {
+          name: fbUser.displayName || (fbUser.email || '').split('@')[0],
+          email: fbUser.email || '',
+          role: isAdmin ? 'admin' : 'client',
+          phone: fbUser.phoneNumber || '',
+          updated_at: new Date().toISOString(),
+        },
+        { merge: true },
+      );
+      return true;
+    } catch (err) {
+      console.warn('ensureProfile: write blocked by rules:', err);
+      return false;
+    }
+  },
+
   async login(email: string, password: string): Promise<{ user: AppUser }> {
     let credential;
     try {
@@ -176,10 +210,30 @@ export const firestoreUsers = {
           role: (data.role as UserRole) || fallbackProfile.role,
           phone: data.phone || fallbackProfile.phone,
         };
+        // If the email is on the admin allowlist but the stored doc has the
+        // wrong role (e.g. it was created before the email was an admin, or
+        // role was missing), upgrade it. Idempotent + best-effort.
+        if (fallbackProfile.role === 'admin' && data.role !== 'admin') {
+          setDoc(profileRef, { role: 'admin', updated_at: new Date().toISOString() }, { merge: true })
+            .catch(writeErr => console.warn('Admin role upgrade blocked:', writeErr));
+          profile = { ...profile, role: 'admin' };
+        }
       } else {
-        // Fire-and-forget write — login must succeed even if rules block this.
-        setDoc(profileRef, { ...fallbackProfile, created_at: new Date().toISOString() })
-          .catch(writeErr => console.warn('User profile create blocked by rules:', writeErr));
+        // Create the doc with merge so any concurrent writer doesn't lose
+        // their data. Awaited because admin-only writes (settings, invoices)
+        // depend on this doc existing with role='admin'.
+        try {
+          await setDoc(
+            profileRef,
+            { ...fallbackProfile, created_at: new Date().toISOString() },
+            { merge: true },
+          );
+        } catch (writeErr) {
+          // Don't block login if the rules are out of date — login resilience
+          // means we proceed on the auth-only fallback profile, but admin
+          // writes will fail until rules are deployed.
+          console.warn('User profile create blocked by rules:', writeErr);
+        }
       }
     } catch (readErr) {
       // Most commonly "Missing or insufficient permissions" if the rules
