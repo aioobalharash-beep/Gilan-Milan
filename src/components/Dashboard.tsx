@@ -9,7 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { collection, query, orderBy, where, onSnapshot, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { formatTime } from '../services/pricingUtils';
-import { enableAdminPushNotifications, onForegroundPush } from '../services/pushNotifications';
+import { enableAdminPushNotifications, onForegroundPush, isPushConfigured } from '../services/pushNotifications';
 import { useProperty } from '../contexts/PropertyContext';
 
 interface DashboardData {
@@ -68,8 +68,10 @@ export const Dashboard: React.FC = () => {
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
   // Push notifications
-  const [pushStatus, setPushStatus] = useState<NotificationPermission | 'unsupported'>(
-    typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
+  const [pushStatus, setPushStatus] = useState<NotificationPermission | 'unsupported' | 'not-configured'>(
+    !isPushConfigured()
+      ? 'not-configured'
+      : typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
   );
   const [pushBusy, setPushBusy] = useState(false);
   const [pushError, setPushError] = useState<string | null>(null);
@@ -89,6 +91,11 @@ export const Dashboard: React.FC = () => {
     } else if (result.status === 'unsupported') {
       setPushStatus('unsupported');
       setPushError('Push notifications are not supported on this device.');
+    } else if (result.status === 'not-configured') {
+      setPushStatus('not-configured');
+      setPushError(
+        'Push notifications aren’t set up for this project yet. Add VITE_FIREBASE_VAPID_KEY in Vercel (Project Settings → Cloud Messaging → Web Push certificates) and redeploy.',
+      );
     } else if (result.status === 'error') {
       setPushError(result.error);
     }
@@ -287,7 +294,7 @@ export const Dashboard: React.FC = () => {
         <h2 className="text-3xl font-bold text-primary-navy">{t('dashboard.eveningOverview')}</h2>
       </motion.section>
 
-      {pushStatus !== 'granted' && pushStatus !== 'unsupported' && (
+      {pushStatus !== 'granted' && pushStatus !== 'unsupported' && pushStatus !== 'not-configured' && (
         <motion.div
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
