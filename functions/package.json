@@ -1,0 +1,13 @@
+{
+  "name": "woody-chalete-functions",
+  "description": "Cloud Functions for Woody Chalete — push notifications on new bookings.",
+  "private": true,
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^6.0.0"
+  }
+}

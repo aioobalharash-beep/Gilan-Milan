@@ -1,0 +1,97 @@
+rules_version = '2';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Woody Chalete — Firestore Security Rules
+//
+// Deploy via Firebase Console:
+//   Firestore Database → Rules → paste this file → Publish
+//
+// Or via Firebase CLI:
+//   firebase deploy --only firestore:rules
+// ─────────────────────────────────────────────────────────────────────────────
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // ── User profiles ──
+    // Each Firebase Auth user owns exactly one profile doc keyed by uid.
+    // The Login flow creates this doc on first sign-in (with role='admin'
+    // when the email is on the clientConfig allowlist).
+    match /users/{uid} {
+      allow read:           if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow create:         if isSignedIn() && request.auth.uid == uid;
+      allow update, delete: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+    }
+
+    // ── Public catalogue & site content ──
+    // Anyone (including unauthenticated guests) can READ. Only authenticated
+    // users can WRITE — this lets the first-load seed in firestore.ts populate
+    // the properties collection on initial admin sign-in. After bootstrap,
+    // all property edits flow through settings/property_details (admin-only).
+    match /properties/{id} {
+      allow read;
+      allow write: if isSignedIn();
+    }
+
+    match /settings/{id} {
+      allow read;
+      allow write: if isAdmin();
+    }
+
+    match /testimonials/{id} {
+      allow read;
+      allow create;                       // public submissions
+      allow update, delete: if isAdmin();
+    }
+
+    // ── Guest checkout flow ──
+    // Bookings + their derived guest/transaction/notification rows can be
+    // CREATED by anyone (the booking page is public). Reads & moderation are
+    // admin-only.
+    match /bookings/{id} {
+      allow read:           if isAdmin();
+      allow create;
+      allow update, delete: if isAdmin();
+    }
+
+    match /guests/{id} {
+      allow read:           if isAdmin();
+      allow create;
+      allow update, delete: if isAdmin();
+    }
+
+    match /transactions/{id} {
+      allow read:           if isAdmin();
+      allow create;
+      allow update, delete: if isAdmin();
+    }
+
+    match /notifications/{id} {
+      allow read, update:   if isAdmin();
+      allow create;
+      allow delete:         if isAdmin();
+    }
+
+    // ── Invoices ──
+    // Admin-managed; guests reach their invoice via a one-shot PDF blob URL,
+    // not a Firestore read.
+    match /invoices/{id}      { allow read, write: if isAdmin(); }
+    match /invoice_items/{id} { allow read, write: if isAdmin(); }
+
+    // ── FCM device tokens for admin push notifications ──
+    // Collection name must match ADMIN_TOKENS_COLLECTION in
+    // src/services/pushNotifications.ts and the api/functions handlers.
+    match /admin_tokens/{id} {
+      allow read, write: if isAdmin();
+    }
+  }
+}
