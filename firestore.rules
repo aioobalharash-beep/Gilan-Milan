@@ -1,13 +1,19 @@
 rules_version = '2';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Woody Chalete — Firestore Security Rules
+// Gilan & Milan Chalet — Firestore Security Rules
 //
 // Deploy via Firebase Console:
 //   Firestore Database → Rules → paste this file → Publish
 //
 // Or via Firebase CLI:
 //   firebase deploy --only firestore:rules
+//
+// IMPORTANT: If login fails with "Missing or insufficient permissions",
+// the rules have not been deployed to your Firebase project yet. The login
+// flow needs read access to /users/{uid} and create access for the user's
+// own profile doc — both are covered below but require these rules to be
+// live in the project.
 // ─────────────────────────────────────────────────────────────────────────────
 service cloud.firestore {
   match /databases/{database}/documents {

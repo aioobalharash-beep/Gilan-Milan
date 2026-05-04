@@ -6,6 +6,8 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useProperty } from '../contexts/PropertyContext';
 import { propertyDetailsDocId } from '../services/firestore';
+import { bl } from '../utils/bilingual';
+import { getClientConfig } from '../config/clientConfig';
 
 const DEFAULT_TERMS_EN = `1. Booking & Payment
 All reservations require a security deposit at the time of booking. Full payment is due upon check-in. Accepted methods include Thawani, bank transfer, and walk-in payment.
@@ -44,7 +46,14 @@ export const Terms: React.FC = () => {
 
   const [termsEn, setTermsEn] = useState('');
   const [termsAr, setTermsAr] = useState('');
-  const { activePropertyId } = useProperty();
+  const { activePropertyId, activeProperty } = useProperty();
+  const config = getClientConfig();
+  const propertyDisplayNameEn = activeProperty
+    ? bl(activeProperty.name as any, 'en') || config.chaletName
+    : config.chaletName;
+  const propertyDisplayNameAr = activeProperty
+    ? bl(activeProperty.name as any, 'ar') || 'شاليه جيلان وميلان'
+    : 'شاليه جيلان وميلان';
 
   useEffect(() => {
     if (!activePropertyId) return;
@@ -92,7 +101,7 @@ export const Terms: React.FC = () => {
       </div>
 
       <p className="text-[10px] text-center text-primary-navy/30 font-bold uppercase tracking-widest">
-        {isAr ? 'شاليه وودي — سلطنة عمان' : 'Woody Chalete — Oman'}
+        {isAr ? `${propertyDisplayNameAr} — سلطنة عُمان` : `${propertyDisplayNameEn} — Oman`}
       </p>
     </div>
   );

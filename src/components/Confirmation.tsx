@@ -279,7 +279,7 @@ export const Confirmation: React.FC = () => {
             <button onClick={() => navigate('/about')} className="text-[10px] text-primary-navy/40 underline font-bold uppercase tracking-widest">{t('sanctuary.aboutUs')}</button>
           </div>
           <p className="text-[9px] text-primary-navy/25 font-bold uppercase tracking-widest">
-            &copy; Woody Chalete. 2024
+            &copy; {localizedProperty}. {new Date().getFullYear()}
           </p>
         </div>
       </motion.div>

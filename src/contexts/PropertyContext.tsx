@@ -13,6 +13,40 @@ import type { Property } from '../types';
 
 const ACTIVE_PROPERTY_STORAGE_KEY = 'activePropertyId';
 
+// Local fallback so the toggle still has the two chalets even if Firestore
+// reads fail (rules out of date, network blip, etc). Mirrors the Firestore
+// seed in `services/firestore.ts → ensureSeedData`.
+const FALLBACK_PROPERTIES: Property[] = [
+  {
+    id: 'gilan',
+    name: { en: 'Gilan Chalet', ar: 'شاليه جيلان' },
+    type: 'Luxury Chalet',
+    capacity: 10,
+    area_sqm: 750,
+    nightly_rate: 120,
+    security_deposit: 50,
+    description: 'A serene retreat where modern luxury meets Omani heritage.',
+    images: [],
+    amenities: [],
+    calendarSyncId: 'gilan-cal-001',
+    status: 'active',
+  },
+  {
+    id: 'milan',
+    name: { en: 'Milan Chalet', ar: 'شاليه ميلان' },
+    type: 'Luxury Chalet',
+    capacity: 12,
+    area_sqm: 900,
+    nightly_rate: 140,
+    security_deposit: 60,
+    description: 'A spacious chalet designed for gatherings.',
+    images: [],
+    amenities: [],
+    calendarSyncId: 'milan-cal-001',
+    status: 'active',
+  },
+];
+
 interface PropertyContextValue {
   /** Active properties available for selection. Empty until first load. */
   properties: Property[];
@@ -73,10 +107,17 @@ export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           list.sort((a: any, b: any) =>
             (a.created_at || '').localeCompare(b.created_at || '') || a.id.localeCompare(b.id),
           );
-          setProperties(list);
+          // If Firestore returned nothing (collection empty or rules denied
+          // before the seed could run), fall back to the local seed so the
+          // toggle and booking flow still work.
+          setProperties(list.length > 0 ? list : FALLBACK_PROPERTIES);
           setLoading(false);
         },
-        () => setLoading(false),
+        (err) => {
+          console.warn('Properties listener failed, using fallback list:', err);
+          setProperties(FALLBACK_PROPERTIES);
+          setLoading(false);
+        },
       );
     });
 

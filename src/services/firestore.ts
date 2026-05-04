@@ -141,39 +141,56 @@ const mapAuthError = (err: any): Error => {
 
 export const firestoreUsers = {
   async login(email: string, password: string): Promise<{ user: AppUser }> {
+    let credential;
     try {
-      const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
-      const fbUser = credential.user;
+      credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+    } catch (err) {
+      // Auth failed — let the form surface a friendly message.
+      throw mapAuthError(err);
+    }
 
-      const profileRef = doc(db, 'users', fbUser.uid);
+    const fbUser = credential.user;
+
+    // Build the profile we'd want from auth + the email allowlist alone, so
+    // that authentication isn't held hostage by Firestore rules being out of
+    // date or by the brief window where the auth token hasn't propagated to
+    // Firestore yet (the latter manifests as "Missing or insufficient
+    // permissions" on the very first read after sign-in).
+    const fallbackProfile: Omit<AppUser, 'id'> = {
+      name: fbUser.displayName || email.split('@')[0],
+      email: fbUser.email || email,
+      role: isAdminEmail(fbUser.email) ? 'admin' : 'client',
+      phone: fbUser.phoneNumber || '',
+    };
+
+    const profileRef = doc(db, 'users', fbUser.uid);
+    let profile: Omit<AppUser, 'id'> = fallbackProfile;
+
+    try {
       const profileSnap = await getDoc(profileRef);
-
-      let profile: Omit<AppUser, 'id'>;
       if (profileSnap.exists()) {
         const data = profileSnap.data();
         profile = {
-          name: data.name || fbUser.displayName || email.split('@')[0],
-          email: data.email || fbUser.email || email,
-          role: (data.role as UserRole) || (isAdminEmail(fbUser.email) ? 'admin' : 'client'),
-          phone: data.phone || fbUser.phoneNumber || '',
+          name: data.name || fallbackProfile.name,
+          email: data.email || fallbackProfile.email,
+          role: (data.role as UserRole) || fallbackProfile.role,
+          phone: data.phone || fallbackProfile.phone,
         };
       } else {
-        profile = {
-          name: fbUser.displayName || email.split('@')[0],
-          email: fbUser.email || email,
-          role: isAdminEmail(fbUser.email) ? 'admin' : 'client',
-          phone: fbUser.phoneNumber || '',
-        };
-        await setDoc(profileRef, {
-          ...profile,
-          created_at: new Date().toISOString(),
-        });
+        // Fire-and-forget write — login must succeed even if rules block this.
+        setDoc(profileRef, { ...fallbackProfile, created_at: new Date().toISOString() })
+          .catch(writeErr => console.warn('User profile create blocked by rules:', writeErr));
       }
-
-      return { user: { id: fbUser.uid, ...profile } };
-    } catch (err) {
-      throw mapAuthError(err);
+    } catch (readErr) {
+      // Most commonly "Missing or insufficient permissions" if the rules
+      // file in firestore.rules has not been deployed to the Firebase
+      // project yet. We don't surface this to the user — they're already
+      // authenticated via Firebase Auth and the app can run on the fallback
+      // profile (admin role is decided by the email allowlist regardless).
+      console.warn('User profile read failed; using fallback profile:', readErr);
     }
+
+    return { user: { id: fbUser.uid, ...profile } };
   },
 
   async register(data: {
@@ -208,16 +225,24 @@ export const firestoreUsers = {
   },
 
   async getById(id: string): Promise<AppUser | null> {
-    const snap = await getDoc(doc(db, 'users', id));
-    if (!snap.exists()) return null;
-    const data = snap.data();
-    return {
-      id: snap.id,
-      name: data.name,
-      email: data.email,
-      role: (data.role as UserRole) || 'client',
-      phone: data.phone,
-    };
+    try {
+      const snap = await getDoc(doc(db, 'users', id));
+      if (!snap.exists()) return null;
+      const data = snap.data();
+      return {
+        id: snap.id,
+        name: data.name,
+        email: data.email,
+        role: (data.role as UserRole) || 'client',
+        phone: data.phone,
+      };
+    } catch (err) {
+      // Treat permission errors (e.g. rules out of date) as "no profile yet"
+      // so AuthContext can rebuild the user from Firebase Auth instead of
+      // forcing a logout.
+      console.warn('User profile read failed:', err);
+      return null;
+    }
   },
 };
 
