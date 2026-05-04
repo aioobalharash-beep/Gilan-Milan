@@ -9,9 +9,12 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { uploadToCloudinary as uploadImageToCloudinary } from '../services/cloudinary';
 import { migratePricing, formatTime, type PricingSettings, type DayUseSlot } from '../services/pricingUtils';
-import { type BilingualField, toBilingual } from '../utils/bilingual';
+import { bl, type BilingualField, toBilingual } from '../utils/bilingual';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useProperty } from '../contexts/PropertyContext';
 import { getClientConfig } from '../config/clientConfig';
+import { propertyDetailsDocId } from '../services/firestore';
+import { propertiesApi } from '../services/api';
 
 interface GalleryImage { url: string; label: string; }
 
@@ -119,8 +122,15 @@ const PropertyEditorComponent: React.FC = () => {
   const { isRTL } = useLanguage();
   const features = getClientConfig().features;
   const dir = isRTL ? 'rtl' : 'ltr';
+  const lang = isRTL ? 'ar' : 'en';
   const textAlignClass = isRTL ? 'text-right' : 'text-left';
   const inputClass = cn(baseInputClass, textAlignClass);
+
+  // Multi-property state — admin edits one chalet at a time, picked via the
+  // header selector. The form is fully replaced on switch so unsaved edits
+  // for one property never bleed into another.
+  const { properties, activePropertyId, setActivePropertyId, addProperty } = useProperty();
+
   const [form, setForm] = useState<PropertyDetails>(DEFAULT_DATA);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -129,6 +139,12 @@ const PropertyEditorComponent: React.FC = () => {
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [newLabel, setNewLabel] = useState('');
   const [newItemInputs, setNewItemInputs] = useState<Record<number, { en: string; ar: string }>>({});
+
+  // Add-new-property modal
+  const [showAddProperty, setShowAddProperty] = useState(false);
+  const [newPropertyEn, setNewPropertyEn] = useState('');
+  const [newPropertyAr, setNewPropertyAr] = useState('');
+  const [creatingProperty, setCreatingProperty] = useState(false);
 
   // Special date form — two price points so a single date can price Day Use
   // and Overnight stays independently (same pattern as check-in / check-out).
@@ -156,35 +172,80 @@ const PropertyEditorComponent: React.FC = () => {
     }));
 
   useEffect(() => {
-    getDoc(doc(db, 'settings', 'property_details'))
-      .then(snap => {
-        if (snap.exists()) {
-          const data = snap.data() as any;
-          setForm({
-            ...DEFAULT_DATA,
-            ...data,
-            name: toBilingual(data.name),
-            headline: toBilingual(data.headline),
-            description: toBilingual(data.description),
-            termsOfStay: toBilingual(data.termsOfStay),
-            footerText: toBilingual(data.footerText),
-            featureSections: normalizeFeatureSections(data.featureSections),
-            pricing: { ...DEFAULT_PRICING, ...migratePricing(data.pricing || {}) },
-            aboutEn: typeof data.aboutEn === 'string' ? data.aboutEn : '',
-            aboutAr: typeof data.aboutAr === 'string' ? data.aboutAr : '',
-            termsEn: typeof data.termsEn === 'string' ? data.termsEn : '',
-            termsAr: typeof data.termsAr === 'string' ? data.termsAr : '',
+    if (!activePropertyId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+
+    const applyData = (data: any) => {
+      setForm({
+        ...DEFAULT_DATA,
+        ...data,
+        name: toBilingual(data.name),
+        headline: toBilingual(data.headline),
+        description: toBilingual(data.description),
+        termsOfStay: toBilingual(data.termsOfStay),
+        footerText: toBilingual(data.footerText),
+        featureSections: normalizeFeatureSections(data.featureSections),
+        pricing: { ...DEFAULT_PRICING, ...migratePricing(data.pricing || {}) },
+        aboutEn: typeof data.aboutEn === 'string' ? data.aboutEn : '',
+        aboutAr: typeof data.aboutAr === 'string' ? data.aboutAr : '',
+        termsEn: typeof data.termsEn === 'string' ? data.termsEn : '',
+        termsAr: typeof data.termsAr === 'string' ? data.termsAr : '',
+      });
+    };
+
+    // 1. Try the per-property settings doc.
+    // 2. Fall back to the legacy single-property doc once (for migrations).
+    // 3. As a last resort, seed from the property record itself so the editor
+    //    isn't blank for a freshly added property.
+    getDoc(doc(db, 'settings', propertyDetailsDocId(activePropertyId)))
+      .then(async perProp => {
+        if (perProp.exists()) {
+          applyData(perProp.data());
+          return;
+        }
+        const legacy = await getDoc(doc(db, 'settings', 'property_details'));
+        if (legacy.exists()) {
+          applyData(legacy.data());
+          return;
+        }
+        const propRecord = properties.find(p => p.id === activePropertyId);
+        if (propRecord) {
+          applyData({
+            name: propRecord.name,
+            description: propRecord.description,
+            gallery: (propRecord.images || []).map(img => ({ url: img.url, label: img.label || '' })),
           });
+        } else {
+          setForm(DEFAULT_DATA);
         }
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+    // properties is intentionally omitted — we only re-load when the *active*
+    // property id changes; updates to the property list itself shouldn't
+    // discard in-progress form edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePropertyId]);
 
   const handleSave = async () => {
+    if (!activePropertyId) return;
     setSaving(true);
     try {
-      await setDoc(doc(db, 'settings', 'property_details'), form);
+      // Per-property settings doc.
+      await setDoc(doc(db, 'settings', propertyDetailsDocId(activePropertyId)), form);
+      // Mirror toggle-facing fields back onto the property record so the
+      // PropertyToggle and Sanctuary header reflect saved name/gallery edits.
+      await propertiesApi.update(activePropertyId, {
+        name: form.name,
+        capacity: form.capacity,
+        area_sqm: form.area_sqm,
+        nightly_rate: form.nightly_rate,
+        description: bl(form.description as any, 'en'),
+        images: form.gallery.map(g => ({ url: g.url, label: g.label || '' })),
+      });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
@@ -194,9 +255,37 @@ const PropertyEditorComponent: React.FC = () => {
     }
   };
 
+  const handleAddProperty = async () => {
+    const nameEn = newPropertyEn.trim();
+    const nameAr = newPropertyAr.trim();
+    if (!nameEn && !nameAr) return;
+    setCreatingProperty(true);
+    try {
+      // Slug from English name; falls back to a timestamp id if none.
+      const baseId = nameEn
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+      const id = baseId || `p_${Date.now()}`;
+      const uniqueId = properties.some(p => p.id === id) ? `${id}-${Date.now()}` : id;
+      await addProperty({
+        id: uniqueId,
+        name: { en: nameEn || nameAr, ar: nameAr || nameEn },
+      });
+      // Switching is handled inside the context; reset the modal state.
+      setShowAddProperty(false);
+      setNewPropertyEn('');
+      setNewPropertyAr('');
+    } catch (err) {
+      console.error('Failed to create property:', err);
+    } finally {
+      setCreatingProperty(false);
+    }
+  };
+
   const uploadPropertyImage = (file: File): Promise<string> =>
     uploadImageToCloudinary(file, {
-      folder: 'woody-chalete-property',
+      folder: `gilan-milan-property-${activePropertyId || 'unassigned'}`,
       onProgress: (pct) => setUploadProgress(pct),
     }).finally(() => setUploadProgress(null));
 
@@ -345,7 +434,125 @@ const PropertyEditorComponent: React.FC = () => {
         </button>
         <span className="text-secondary-gold font-bold tracking-widest text-[10px] uppercase">{t('propertyEditor.propertyManagement')}</span>
         <h1 className="font-headline text-2xl font-bold text-primary-navy mt-1">{t('propertyEditor.editProperty')}</h1>
+
+        {/* Property switcher + Add New */}
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          {properties.map(p => {
+            const isActive = p.id === activePropertyId;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setActivePropertyId(p.id)}
+                className={cn(
+                  'px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider border transition-colors',
+                  isActive
+                    ? 'bg-primary-navy text-white border-primary-navy'
+                    : 'bg-white text-primary-navy/60 border-primary-navy/10 hover:border-secondary-gold/40 hover:text-primary-navy',
+                )}
+              >
+                {bl(p.name as any, lang) || p.id}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => setShowAddProperty(true)}
+            className="px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider border-2 border-dashed border-secondary-gold/40 text-secondary-gold hover:bg-secondary-gold/5 transition-colors flex items-center gap-1.5"
+          >
+            <Plus size={12} /> {t('propertyEditor.addNewProperty', 'Add New Property')}
+          </button>
+        </div>
       </div>
+
+      {/* Add New Property modal */}
+      <AnimatePresence>
+        {showAddProperty && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => !creatingProperty && setShowAddProperty(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.96 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-white rounded-2xl p-6 w-full max-w-md space-y-4 shadow-2xl"
+              dir={dir}
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="font-headline text-lg font-bold text-primary-navy">
+                  {t('propertyEditor.addNewProperty', 'Add New Property')}
+                </h3>
+                <button
+                  onClick={() => !creatingProperty && setShowAddProperty(false)}
+                  className="p-1.5 rounded-full hover:bg-primary-navy/5 transition-colors"
+                >
+                  <X size={16} className="text-primary-navy/50" />
+                </button>
+              </div>
+              <p className="text-xs text-primary-navy/50 leading-relaxed">
+                {t(
+                  'propertyEditor.addNewPropertyHint',
+                  'Adds a new chalet to the toggle. You can finish setting pricing, gallery, and bank details after it is created.',
+                )}
+              </p>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">
+                    {t('propertyEditor.propertyName')}
+                  </label>
+                  <input
+                    type="text"
+                    value={newPropertyEn}
+                    onChange={(e) => setNewPropertyEn(e.target.value)}
+                    placeholder={t('propertyEditor.propertyNamePlaceholder')}
+                    className={cn(baseInputClass, 'text-left')}
+                    autoFocus
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold flex items-center gap-1.5">
+                    <Languages size={12} /> {t('propertyEditor.propertyNameAr')}
+                  </label>
+                  <input
+                    type="text"
+                    dir="rtl"
+                    value={newPropertyAr}
+                    onChange={(e) => setNewPropertyAr(e.target.value)}
+                    placeholder={t('propertyEditor.propertyNameArPlaceholder')}
+                    className={cn(baseInputClass, 'text-right')}
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => !creatingProperty && setShowAddProperty(false)}
+                  disabled={creatingProperty}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-primary-navy/60 hover:bg-primary-navy/5 transition-colors disabled:opacity-50"
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddProperty}
+                  disabled={creatingProperty || (!newPropertyEn.trim() && !newPropertyAr.trim())}
+                  className="px-5 py-2.5 rounded-xl bg-primary-navy text-white text-xs font-bold uppercase tracking-wider hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity flex items-center gap-2"
+                >
+                  {creatingProperty
+                    ? <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    : <Plus size={14} />}
+                  {t('propertyEditor.createProperty', 'Create Property')}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Media Gallery */}
       <section className="bg-white rounded-[20px] p-6 border border-primary-navy/5 shadow-sm space-y-4">

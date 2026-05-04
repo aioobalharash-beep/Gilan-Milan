@@ -7,6 +7,8 @@ import { firestoreBookings } from '../services/firestore';
 import { uploadToCloudinary } from '../services/cloudinary';
 import { getClientConfig } from '../config/clientConfig';
 import { formatTime } from '../services/pricingUtils';
+import { useProperty } from '../contexts/PropertyContext';
+import { bl } from '../utils/bilingual';
 import type { Property } from '../types';
 
 interface AddWalkInGuestProps {
@@ -48,7 +50,12 @@ function defaultCheckOutLabel(): string {
 }
 
 export const AddWalkInGuest: React.FC<AddWalkInGuestProps> = ({ open, onClose, properties }) => {
-  const { t } = useTranslation();
+  // Walk-ins target whichever chalet the admin currently has selected. We keep
+  // accepting `properties` from the parent for back-compat, but prefer the
+  // active property from context so admin choices in the Layout header drive
+  // the booking destination.
+  const { activeProperty, properties: ctxProperties } = useProperty();
+  const { t, i18n } = useTranslation();
 
   const [form, setForm] = useState<WalkInForm>(EMPTY_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -166,12 +173,15 @@ export const AddWalkInGuest: React.FC<AddWalkInGuestProps> = ({ open, onClose, p
         }
       }
 
-      const prop = properties[0];
+      // Prefer the actively-selected property from context, falling back to
+      // whatever the parent passed in (legacy single-property callers).
+      const prop = (activeProperty || ctxProperties[0] || properties[0]) as Property | undefined;
+      const lang = i18n.language;
       const parsedAmount = paymentMode === 'paid' ? parseFloat(amountPaid) : 0;
 
       await firestoreBookings.create({
         property_id: prop?.id || 'default',
-        property_name: prop?.name || 'Woody Chalete',
+        property_name: prop ? (bl(prop.name as any, lang) || prop.id) : 'Gilan & Milan Chalet',
         guest_name: form.name.trim(),
         guest_phone: `+968${form.phone.replace(/\s/g, '')}`,
         guest_email: form.email || undefined,

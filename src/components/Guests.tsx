@@ -4,12 +4,13 @@ import { Search, Calendar as CalendarIcon, Phone, UserPlus, X, Clock, AlertCircl
 import { cn } from '@/src/lib/utils';
 import { useSearchParams } from 'react-router-dom';
 import { propertiesApi } from '../services/api';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, limit } from 'firebase/firestore';
+import { collection, query, orderBy, where, onSnapshot, doc, updateDoc, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { firestoreBookings } from '../services/firestore';
 import type { Property } from '../types';
 import { useTranslation } from 'react-i18next';
 import { AddWalkInGuest } from './AddWalkInGuest';
+import { useProperty } from '../contexts/PropertyContext';
 
 type DisplayStatus = 'pending' | 'upcoming' | 'checked-in' | 'completed';
 
@@ -90,9 +91,17 @@ export const Guests: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [properties, setProperties] = useState<Property[]>([]);
 
-  // Real-time bookings from Firestore with pagination
+  // Real-time bookings from Firestore with pagination — scoped to the
+  // active property so the admin sees one chalet's guests at a time.
+  const { activePropertyId } = useProperty();
   useEffect(() => {
-    const q = query(collection(db, 'bookings'), orderBy('created_at', 'desc'), limit(pageLimit));
+    if (!activePropertyId) return;
+    const q = query(
+      collection(db, 'bookings'),
+      where('property_id', '==', activePropertyId),
+      orderBy('created_at', 'desc'),
+      limit(pageLimit),
+    );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setHasMore(snapshot.docs.length >= pageLimit);
       const guests = snapshot.docs
@@ -133,7 +142,7 @@ export const Guests: React.FC = () => {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [pageLimit]);
+  }, [pageLimit, activePropertyId]);
 
   useEffect(() => {
     propertiesApi.list().then(setProperties).catch(console.error);

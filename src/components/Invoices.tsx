@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { FileText, Receipt, Download, MessageCircle, X, Calendar, Building2, Edit3, Paperclip, IdCard, AlertCircle, Home, Printer } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { collection, query, orderBy, onSnapshot, doc, getDoc, setDoc, limit } from 'firebase/firestore';
+import { collection, query, orderBy, where, onSnapshot, doc, getDoc, setDoc, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { generateVATReportPDF } from '../services/vatReport';
 import type { Invoice } from '../types';
@@ -10,6 +10,9 @@ import { useTranslation } from 'react-i18next';
 import { getClientConfig, whatsappHref } from '../config/clientConfig';
 import { BrandMark } from './BrandMark';
 import { PrintableInvoice } from './PrintableInvoice';
+import { useProperty } from '../contexts/PropertyContext';
+import { propertyDetailsDocId } from '../services/firestore';
+import { bl } from '../utils/bilingual';
 
 interface RealtimeBooking {
   id: string;
@@ -55,7 +58,7 @@ export const Invoices: React.FC = () => {
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [selectedBooking, setSelectedBooking] = useState<RealtimeBooking | null>(null);
   const [whatsappTemplate, setWhatsappTemplate] = useState<string>(
-    `Assalamu Alaikum {{guest_name}},\n\nHere is your invoice for your stay at Woody Chalete:\n\nBooking Ref: {{booking_id}}\nStay: {{stay_amount}} OMR\n{{deposit_line}}\nTotal: {{total_amount}} OMR\n{{receipt_line}}\n\nThank you for choosing Woody Chalete.`
+    `Assalamu Alaikum {{guest_name}},\n\nHere is your invoice for your stay at Gilan & Milan Chalet:\n\nBooking Ref: {{booking_id}}\nStay: {{stay_amount}} OMR\n{{deposit_line}}\nTotal: {{total_amount}} OMR\n{{receipt_line}}\n\nThank you for choosing Gilan & Milan Chalet.`
   );
   const [licenseNumber, setLicenseNumber] = useState('');
   const [termsEn, setTermsEn] = useState('');
@@ -69,32 +72,44 @@ export const Invoices: React.FC = () => {
   const [pageLimit, setPageLimit] = useState(PAGE_SIZE);
   const [hasMore, setHasMore] = useState(true);
 
-  // Load WhatsApp template + property licenseNumber from Firestore on mount
+  const { activeProperty, activePropertyId } = useProperty();
+
+  // Load WhatsApp template + property licenseNumber from Firestore on mount.
+  // The property settings are loaded per active property so each chalet gets
+  // its own license number, terms, etc.
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const [notifSnap, propSnap] = await Promise.all([
-          getDoc(doc(db, 'settings', 'notifications')),
-          getDoc(doc(db, 'settings', 'property_details')),
-        ]);
+        const notifSnap = await getDoc(doc(db, 'settings', 'notifications'));
         if (notifSnap.exists() && notifSnap.data().whatsappTemplate) {
           setWhatsappTemplate(notifSnap.data().whatsappTemplate);
         }
-        if (propSnap.exists()) {
-          const pd = propSnap.data() as { licenseNumber?: string; termsEn?: string; termsAr?: string };
+        if (!activePropertyId) return;
+        const apply = (pd: any) => {
           if (pd.licenseNumber) setLicenseNumber(pd.licenseNumber);
           if (typeof pd.termsEn === 'string') setTermsEn(pd.termsEn);
           if (typeof pd.termsAr === 'string') setTermsAr(pd.termsAr);
-        }
+        };
+        const perProp = await getDoc(doc(db, 'settings', propertyDetailsDocId(activePropertyId)));
+        if (perProp.exists()) { apply(perProp.data()); return; }
+        const legacy = await getDoc(doc(db, 'settings', 'property_details'));
+        if (legacy.exists()) apply(legacy.data());
       } catch (err) {
         console.error('Failed to load settings:', err);
       }
     };
     loadSettings();
-  }, []);
+  }, [activePropertyId]);
 
   useEffect(() => {
-    const q = query(collection(db, 'bookings'), orderBy('created_at', 'desc'), limit(pageLimit));
+    if (!activePropertyId) return;
+    setLoading(true);
+    const q = query(
+      collection(db, 'bookings'),
+      where('property_id', '==', activePropertyId),
+      orderBy('created_at', 'desc'),
+      limit(pageLimit),
+    );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setHasMore(snapshot.docs.length >= pageLimit);
       const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as RealtimeBooking));
@@ -105,13 +120,17 @@ export const Invoices: React.FC = () => {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [pageLimit]);
+  }, [pageLimit, activePropertyId]);
 
   // Convert booking to Invoice (no VAT for guest invoices — Grand Total = Subtotal)
   const bookingToInvoice = (b: RealtimeBooking): Invoice => {
     const lang = i18n.language;
     const isAr = lang === 'ar';
-    const propName = isAr ? 'شاليه وودي' : b.property_name;
+    // Prefer the active property's localized name; fall back to whatever was
+    // recorded on the booking when it was created.
+    const propName = activeProperty
+      ? bl(activeProperty.name as any, lang) || b.property_name
+      : (isAr ? b.property_name : b.property_name);
     const deposit = Number(b.depositAmount) || Number(b.security_deposit) || 0;
     const stayTotal = Number(b.stayTotal) || (Number(b.grandTotal || b.total_amount) - deposit);
     const total = Number(b.grandTotal) || Number(b.total_amount) || (stayTotal + deposit);

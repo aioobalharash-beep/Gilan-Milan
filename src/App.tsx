@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LanguageProvider } from './contexts/LanguageContext';
+import { PropertyProvider } from './contexts/PropertyContext';
 import { ScrollToTop } from './components/ScrollToTop';
 
 // Layouts loaded eagerly (small, shared shell)
@@ -36,7 +37,7 @@ function LoadingScreen() {
   return (
     <div className="min-h-screen bg-pearl-white flex items-center justify-center">
       <div className="text-center space-y-4">
-        <h1 className="text-2xl font-bold font-headline text-primary-navy">Woody Chalete</h1>
+        <h1 className="text-2xl font-bold font-headline text-primary-navy">Gilan &amp; Milan Chalet</h1>
         <div className="w-8 h-8 border-2 border-primary-navy/20 border-t-secondary-gold rounded-full animate-spin mx-auto" />
       </div>
     </div>
@@ -87,7 +88,9 @@ export default function App() {
       <ScrollToTop />
       <LanguageProvider>
         <AuthProvider>
-          <AppRoutes />
+          <PropertyProvider>
+            <AppRoutes />
+          </PropertyProvider>
         </AuthProvider>
       </LanguageProvider>
     </BrowserRouter>

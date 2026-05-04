@@ -3,25 +3,28 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronLeft, ChevronRight, ShieldCheck, AlertCircle, ArrowLeft, Upload, CreditCard, Building2, Check, FileText, X, Download } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { propertiesApi, bookingsApi } from '../services/api';
+import { bookingsApi } from '../services/api';
 import { downloadTermsPDF } from '../services/pdf';
 import { uploadToCloudinary } from '../services/cloudinary';
 import { sendWhatsAppInvoice } from './Invoices';
-import { collection, query, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { collection, query, orderBy, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { calculateTotalPrice, formatBreakdown, migratePricing, formatTime, getSlotRateForDay, formatLocalDate, parseLocalDate, getDayUseTimes, getNightStayTimes, type PricingSettings, type PriceBreakdown, type DayUseSlot } from '../services/pricingUtils';
 import type { Property } from '../types';
 import { useTranslation } from 'react-i18next';
 import { bl } from '../utils/bilingual';
 import { getClientConfig } from '../config/clientConfig';
+import { useProperty } from '../contexts/PropertyContext';
+import { propertyDetailsDocId } from '../services/firestore';
 
 export const Booking: React.FC = () => {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
   const features = getClientConfig().features;
-  const [property, setProperty] = useState<Property | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { activeProperty, activePropertyId, loading: propertyLoading } = useProperty();
+  const property: Property | null = activeProperty;
+  const loading = propertyLoading;
   const [submitting, setSubmitting] = useState(false);
 
   // Form state
@@ -93,16 +96,9 @@ export const Booking: React.FC = () => {
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [termsNudge, setTermsNudge] = useState(false);
 
-  useEffect(() => {
-    propertiesApi.list()
-      .then(properties => {
-        if (properties.length > 0) setProperty(properties[0]);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
-
-  // Real-time listener for existing bookings to prevent double-booking.
+  // Booking availability is isolated per-property: switching the active
+  // property tears down + rebuilds the listener so calendar blocks reflect
+  // only that chalet's bookings.
   //
   // A date is blocked iff a guest is occupying the chalet from the 2 PM arrival
   // window onwards (i.e. it is a NIGHT someone is sleeping there). The morning
@@ -111,7 +107,17 @@ export const Booking: React.FC = () => {
   //   • bookedNights — the nights the guest sleeps at the property.
   //   • slotMap — slot-based day-use bookings that only block a single slot.
   useEffect(() => {
-    const q = query(collection(db, 'bookings'), orderBy('created_at', 'desc'));
+    if (!activePropertyId) return;
+    // Reset prior availability when switching properties so stale blocks from
+    // the other chalet don't briefly flicker on the calendar.
+    setBookedDates(new Set());
+    setBookedSlots(new Map());
+    setBookedDatesLoaded(false);
+    const q = query(
+      collection(db, 'bookings'),
+      where('property_id', '==', activePropertyId),
+      orderBy('created_at', 'desc'),
+    );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const bookedNights = new Set<string>();
       const slotMap = new Map<string, string[]>();
@@ -148,7 +154,7 @@ export const Booking: React.FC = () => {
       setBookedDatesLoaded(true);
     });
     return () => unsubscribe();
-  }, []);
+  }, [activePropertyId]);
 
   // Real-time listener for property availability status
   useEffect(() => {
@@ -161,32 +167,51 @@ export const Booking: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // Load dynamic pricing settings + bank details
+  // Load dynamic pricing settings + bank details for the active property.
+  // Re-runs on property switch so each chalet keeps its own pricing grid,
+  // day-use slots, terms, and bank-transfer details. Falls back to the
+  // legacy single-property doc once for backwards compatibility.
   useEffect(() => {
-    getDoc(doc(db, 'settings', 'property_details'))
+    if (!activePropertyId) return;
+    // Reset so we don't briefly show the previous chalet's pricing/bank info
+    // while the per-property doc loads.
+    setPricingSettings(null);
+    setDayUseSlots([]);
+    setBankDetails({ bank_name: '', account_name: '', iban: '', bankPhone: '' });
+    setTermsOfStayRaw('');
+
+    const applyDetails = (data: any) => {
+      if (data.pricing) {
+        const migrated = migratePricing(data.pricing);
+        setPricingSettings(migrated);
+        if (migrated.day_use_slots?.length) setDayUseSlots(migrated.day_use_slots);
+      }
+      if (data.bank_name || data.account_name || data.iban) {
+        setBankDetails(prev => ({
+          bank_name: data.bank_name || prev.bank_name,
+          account_name: data.account_name || prev.account_name,
+          iban: data.iban || prev.iban,
+          bankPhone: data.bankPhone || '',
+        }));
+      }
+      if (data.termsOfStay) {
+        setTermsOfStayRaw(data.termsOfStay);
+      }
+    };
+
+    getDoc(doc(db, 'settings', propertyDetailsDocId(activePropertyId)))
       .then(snap => {
         if (snap.exists()) {
-          const data = snap.data();
-          if (data.pricing) {
-            const migrated = migratePricing(data.pricing);
-            setPricingSettings(migrated);
-            if (migrated.day_use_slots?.length) setDayUseSlots(migrated.day_use_slots);
-          }
-          if (data.bank_name || data.account_name || data.iban) {
-            setBankDetails(prev => ({
-              bank_name: data.bank_name || prev.bank_name,
-              account_name: data.account_name || prev.account_name,
-              iban: data.iban || prev.iban,
-              bankPhone: data.bankPhone || '',
-            }));
-          }
-          if (data.termsOfStay) {
-            setTermsOfStayRaw(data.termsOfStay);
-          }
+          applyDetails(snap.data());
+          return;
         }
+        // Backwards-compat fallback to the legacy single-property doc.
+        return getDoc(doc(db, 'settings', 'property_details')).then(legacy => {
+          if (legacy.exists()) applyDetails(legacy.data());
+        });
       })
       .catch(console.error);
-  }, []);
+  }, [activePropertyId]);
 
   const getDaysInMonth = (month: number, year: number) => new Date(year, month + 1, 0).getDate();
   const getFirstDayOfMonth = (month: number, year: number) => new Date(year, month, 1).getDay();
@@ -483,7 +508,7 @@ export const Booking: React.FC = () => {
   // Upload bank-transfer receipt via the shared Cloudinary service
   const uploadReceipt = (file: File): Promise<string> =>
     uploadToCloudinary(file, {
-      folder: 'woody-chalete-receipts',
+      folder: 'gilan-milan-receipts',
       onProgress: (pct) => setUploadProgress(pct),
     }).finally(() => setUploadProgress(null));
 
@@ -496,7 +521,7 @@ export const Booking: React.FC = () => {
     setIdUploading(true);
     try {
       const url = await uploadToCloudinary(file, {
-        folder: 'woody-chalete-ids',
+        folder: 'gilan-milan-ids',
         onProgress: (pct) => setIdUploadProgress(pct),
       });
       setIdImageUrl(url);
@@ -542,14 +567,18 @@ export const Booking: React.FC = () => {
         await new Promise(resolve => setTimeout(resolve, 2000));
 
         let thawaniBooking: any = null;
-        let thawaniPropertyName = property.name;
+        // Booking records store a single resolved string for the property name
+        // so invoices/notifications/whatsapp don't need to know about bilingual
+        // values. Resolve once, in the active language.
+        const resolvedPropertyName = bl(property.name as any, lang) || property.id;
+        let thawaniPropertyName = resolvedPropertyName;
 
         try {
           // Save booking to Firestore as paid
           const termsTimestamp = new Date().toISOString();
           const result = await bookingsApi.create({
             property_id: property.id,
-            property_name: property.name,
+            property_name: resolvedPropertyName,
             guest_name: guestName.trim(),
             guest_phone: `+968${guestPhone.replace(/\s/g, '')}`,
             guest_email: guestEmail || undefined,
@@ -622,9 +651,10 @@ export const Booking: React.FC = () => {
 
       // Bank transfer — save booking to Firestore
       const bankTermsTimestamp = new Date().toISOString();
+      const resolvedPropertyName = bl(property.name as any, lang) || property.id;
       const result = await bookingsApi.create({
         property_id: property.id,
-        property_name: property.name,
+        property_name: resolvedPropertyName,
         guest_name: guestName.trim(),
         guest_phone: `+968${guestPhone.replace(/\s/g, '')}`,
         guest_email: guestEmail || undefined,
@@ -1480,7 +1510,7 @@ export const Booking: React.FC = () => {
                   </div>
                   <div>
                     <p className="font-headline text-sm font-bold text-primary-navy">{t('booking.termsOfStay')}</p>
-                    <p className="text-[10px] text-primary-navy/40 uppercase tracking-widest font-bold">Woody Chalete</p>
+                    <p className="text-[10px] text-primary-navy/40 uppercase tracking-widest font-bold">{property ? bl(property.name as any, lang) : ''}</p>
                   </div>
                 </div>
                 <button onClick={() => setShowTermsModal(false)} className="p-2 hover:bg-primary-navy/5 rounded-full transition-colors">

@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { Calendar as CalendarIcon, Instagram, MessageCircle, MapPin, Check } from 'lucide-react';
 import { OptimizedImage } from './OptimizedImage';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useTranslation } from 'react-i18next';
 import { bl, type BilingualField } from '../utils/bilingual';
 import { getClientConfig, whatsappHref } from '../config/clientConfig';
+import { useProperty } from '../contexts/PropertyContext';
+import { propertyDetailsDocId } from '../services/firestore';
 
 interface DayUseSlotRates {
   sunday_rate?: number;
@@ -88,6 +90,7 @@ interface PropertyDetails {
   description: string | BilingualField;
   featureSections: FeatureSection[];
   gallery: { url: string; label: string }[];
+  amenities?: string[];
   pricing?: PricingSettings;
   footerText?: string | BilingualField;
   whatsappNumber?: string;
@@ -95,18 +98,19 @@ interface PropertyDetails {
 }
 
 const DEFAULTS: PropertyDetails = {
-  name: 'Woody Chalete',
+  name: 'Gilan & Milan Chalet',
   capacity: 12,
   area_sqm: 850,
   nightly_rate: 120,
   headline: 'Curated Excellence',
-  description: 'Nestled in the heart of the Omani landscape, Woody Chalete offers an unparalleled blend of modern luxury and heritage-inspired architecture. Every corner of this estate has been curated to provide a seamless flow between indoor relaxation and outdoor majesty.',
+  description: 'A curated retreat in the heart of the Omani landscape — modern comfort, heritage-inspired design.',
   featureSections: [],
   gallery: [
     { url: 'https://picsum.photos/seed/oman-bedroom-1/800/1000', label: 'Master Suite: Serene Sands' },
     { url: 'https://picsum.photos/seed/oman-bedroom-2/800/1000', label: 'Guest Wing: Golden Hour' },
     { url: 'https://picsum.photos/seed/oman-kitchen/800/1000', label: 'Culinary Studio' },
   ],
+  amenities: [],
 };
 
 interface FooterProps {
@@ -160,7 +164,7 @@ const Footer = React.memo<FooterProps>(({ chaletName, footerText, whatsappNumber
           </a>
         )}
         <a
-          href="https://www.instagram.com/wooody_chalete/"
+          href={config.social.instagram || 'https://www.instagram.com/'}
           target="_blank"
           rel="noopener noreferrer"
           aria-label="Instagram"
@@ -198,25 +202,65 @@ export const Sanctuary: React.FC = () => {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
+  const { activeProperty, activePropertyId, loading: propertyLoading } = useProperty();
   const [data, setData] = useState<PropertyDetails>(DEFAULTS);
   const [loading, setLoading] = useState(true);
 
+  // When the active property changes we re-subscribe to its per-property
+  // settings doc and seed the view with the matching property record so the
+  // gallery/amenities/name swap instantly even before the settings doc loads.
   useEffect(() => {
+    if (!activePropertyId) {
+      // No property yet — keep showing defaults but stop the spinner once the
+      // property list itself has finished loading.
+      if (!propertyLoading) setLoading(false);
+      return;
+    }
+    setLoading(true);
+
+    // Seed from the property record (toggle-facing fields).
+    const seed: Partial<PropertyDetails> = activeProperty ? {
+      name: activeProperty.name as PropertyDetails['name'],
+      capacity: activeProperty.capacity,
+      area_sqm: activeProperty.area_sqm,
+      nightly_rate: activeProperty.nightly_rate,
+      description: activeProperty.description || '',
+      gallery: (activeProperty.images || []).map(img => ({ url: img.url, label: img.label || '' })),
+      amenities: activeProperty.amenities || [],
+    } : {};
+
+    setData({ ...DEFAULTS, ...seed } as PropertyDetails);
+
     const unsubscribe = onSnapshot(
-      doc(db, 'settings', 'property_details'),
+      doc(db, 'settings', propertyDetailsDocId(activePropertyId)),
       (snap) => {
         if (snap.exists()) {
-          setData({ ...DEFAULTS, ...snap.data() as PropertyDetails });
+          // Per-property settings doc wins (gallery/pricing/about/etc.).
+          setData(prev => ({ ...DEFAULTS, ...seed, ...prev, ...(snap.data() as PropertyDetails) }));
+          setLoading(false);
+        } else {
+          // No per-property doc yet — fall back once to legacy single doc so
+          // existing deployments with one chalet keep working.
+          getDoc(doc(db, 'settings', 'property_details'))
+            .then(legacy => {
+              if (legacy.exists()) {
+                setData(prev => ({ ...DEFAULTS, ...seed, ...prev, ...(legacy.data() as PropertyDetails) }));
+              }
+            })
+            .catch(() => undefined)
+            .finally(() => setLoading(false));
         }
-        setLoading(false);
       },
       (error) => {
         console.error('Property details listener error:', error);
         setLoading(false);
-      }
+      },
     );
     return () => unsubscribe();
-  }, []);
+    // We intentionally depend on the id, not the full record, so we don't
+    // re-subscribe on unrelated property record changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePropertyId]);
 
   if (loading) {
     return (
@@ -256,8 +300,15 @@ export const Sanctuary: React.FC = () => {
 
   return (
     <div className="space-y-12 pb-12">
-      {/* Hero Gallery */}
-      <section className="px-6 mt-8">
+      {/* Hero Gallery — keyed by active property so React tears down + re-mounts
+          the section on switch, giving guests a clear visual transition. */}
+      <motion.section
+        key={activePropertyId || 'default'}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25 }}
+        className="px-6 mt-8"
+      >
         <div className="flex justify-between items-end mb-6">
           <div>
             <span className="text-secondary-gold font-bold tracking-widest text-[10px] uppercase block mb-1">{t('sanctuary.estatePreview')}</span>
@@ -285,7 +336,7 @@ export const Sanctuary: React.FC = () => {
             </motion.div>
           ))}
         </div>
-      </section>
+      </motion.section>
 
       {/* Description */}
       <section className="px-6">
@@ -294,6 +345,19 @@ export const Sanctuary: React.FC = () => {
         <div className="mt-4 text-sm text-primary-navy/60">
           <span className="font-bold text-secondary-gold">{t('sanctuary.from')} {getMinPrice(data.pricing, data.nightly_rate)} {t('common.omr')}</span> {t('common.perNight')}
         </div>
+        {data.amenities && data.amenities.length > 0 && (
+          <div className="mt-5 flex flex-wrap gap-2">
+            {data.amenities.map((a, i) => (
+              <span
+                key={`${activePropertyId}-amenity-${i}`}
+                className="inline-flex items-center gap-1.5 rounded-full bg-secondary-gold/10 text-primary-navy/80 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider"
+              >
+                <Check size={12} className="text-secondary-gold" />
+                {a}
+              </span>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Resort Guide — Categorized Feature Tiles */}

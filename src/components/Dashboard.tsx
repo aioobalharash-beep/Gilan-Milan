@@ -6,10 +6,11 @@ import { dashboardApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { collection, query, orderBy, onSnapshot, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, orderBy, where, onSnapshot, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { formatTime } from '../services/pricingUtils';
 import { enableAdminPushNotifications, onForegroundPush } from '../services/pushNotifications';
+import { useProperty } from '../contexts/PropertyContext';
 
 interface DashboardData {
   revenue: { total: number; trend: number };
@@ -109,14 +110,22 @@ export const Dashboard: React.FC = () => {
       .finally(() => setLoading(false));
   }, [user]);
 
-  // Single source of truth: onSnapshot on 'bookings' collection
+  // Single source of truth: onSnapshot on 'bookings' collection — filtered to
+  // the active property so dashboard stats reflect the chalet currently in
+  // focus. Switching the property toggle re-subscribes automatically.
+  const { activePropertyId } = useProperty();
   useEffect(() => {
-    const q = query(collection(db, 'bookings'), orderBy('created_at', 'desc'));
+    if (!activePropertyId) return;
+    const q = query(
+      collection(db, 'bookings'),
+      where('property_id', '==', activePropertyId),
+      orderBy('created_at', 'desc'),
+    );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setBookings(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as RealtimeBooking)));
     });
     return () => unsubscribe();
-  }, []);
+  }, [activePropertyId]);
 
   // Real-time testimonials
   useEffect(() => {

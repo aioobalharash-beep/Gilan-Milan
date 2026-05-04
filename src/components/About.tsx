@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { ArrowLeft, MapPin, Phone, Mail } from 'lucide-react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { useProperty } from '../contexts/PropertyContext';
+import { propertyDetailsDocId } from '../services/firestore';
 
 const DEFAULT_ABOUT_EN = `Woody Chalete is a luxury chalet nestled in the heart of Oman's breathtaking landscape. We blend modern comfort with traditional Omani heritage to create an unforgettable retreat experience.
 
@@ -25,17 +27,22 @@ export const About: React.FC = () => {
 
   const [aboutEn, setAboutEn] = useState('');
   const [aboutAr, setAboutAr] = useState('');
+  const { activePropertyId } = useProperty();
 
   useEffect(() => {
-    getDoc(doc(db, 'settings', 'property_details'))
-      .then(snap => {
-        if (!snap.exists()) return;
-        const data = snap.data() as any;
-        setAboutEn(typeof data.aboutEn === 'string' ? data.aboutEn : '');
-        setAboutAr(typeof data.aboutAr === 'string' ? data.aboutAr : '');
+    if (!activePropertyId) return;
+    const apply = (data: any) => {
+      setAboutEn(typeof data.aboutEn === 'string' ? data.aboutEn : '');
+      setAboutAr(typeof data.aboutAr === 'string' ? data.aboutAr : '');
+    };
+    getDoc(doc(db, 'settings', propertyDetailsDocId(activePropertyId)))
+      .then(async snap => {
+        if (snap.exists()) { apply(snap.data()); return; }
+        const legacy = await getDoc(doc(db, 'settings', 'property_details'));
+        if (legacy.exists()) apply(legacy.data());
       })
       .catch(console.error);
-  }, []);
+  }, [activePropertyId]);
 
   const arText = aboutAr.trim() || DEFAULT_ABOUT_AR;
   const enText = aboutEn.trim() || DEFAULT_ABOUT_EN;
