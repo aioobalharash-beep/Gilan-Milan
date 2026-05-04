@@ -26,6 +26,22 @@ interface PropertyToggleProps {
  * collapses to a dropdown. Wraps the global PropertyContext so any consumer
  * (Sanctuary, Booking, etc.) re-renders against the newly selected property.
  */
+/**
+ * Trim a noisy "Chalet" / "شاليه" suffix or prefix from the property name so
+ * the toggle stays compact on small screens — "Gilan Chalet" becomes "Gilan",
+ * "شاليه ميلان" becomes "ميلان". Falls back to the full label if stripping
+ * leaves it empty.
+ */
+const shortPropertyLabel = (full: string): string => {
+  if (!full) return '';
+  const trimmed = full
+    .replace(/\s*chalet\s*$/i, '')
+    .replace(/^شاليه\s+/u, '')
+    .replace(/\s*شاليه\s*$/u, '')
+    .trim();
+  return trimmed || full;
+};
+
 export const PropertyToggle: React.FC<PropertyToggleProps> = ({
   variant = 'light',
   layout = 'auto',
@@ -82,14 +98,16 @@ export const PropertyToggle: React.FC<PropertyToggleProps> = ({
         role="tablist"
         aria-label="Property selector"
         className={cn(
-          'relative inline-flex items-center rounded-full p-1 text-xs font-bold uppercase tracking-wider',
+          // Equal-width grid columns keep both pills the same size so the
+          // animated active background doesn't jump width when switching.
+          'relative inline-grid grid-cols-2 items-center rounded-full p-1 text-[11px] sm:text-xs font-bold uppercase tracking-wider',
           baseColors.track,
           className,
         )}
       >
         {properties.map(p => {
           const isActive = p.id === activePropertyId;
-          const label = bl(p.name as any, lang);
+          const label = shortPropertyLabel(bl(p.name as any, lang));
           return (
             <button
               key={p.id}
@@ -97,7 +115,7 @@ export const PropertyToggle: React.FC<PropertyToggleProps> = ({
               aria-selected={isActive}
               onClick={() => setActivePropertyId(p.id)}
               className={cn(
-                'relative px-3 py-1.5 rounded-full transition-colors duration-200 z-10 min-w-[68px]',
+                'relative whitespace-nowrap px-3 sm:px-4 py-1.5 rounded-full transition-colors duration-200 z-10',
                 isActive ? baseColors.activeText : baseColors.inactive,
               )}
             >
@@ -117,7 +135,9 @@ export const PropertyToggle: React.FC<PropertyToggleProps> = ({
   }
 
   // Dropdown layout (3+ properties or forced).
-  const activeName = bl((properties.find(p => p.id === activePropertyId)?.name) as any, lang);
+  const activeName = shortPropertyLabel(
+    bl((properties.find(p => p.id === activePropertyId)?.name) as any, lang),
+  );
   return (
     <div ref={wrapperRef} className={cn('relative inline-block', className)}>
       <button
@@ -126,13 +146,13 @@ export const PropertyToggle: React.FC<PropertyToggleProps> = ({
         aria-haspopup="listbox"
         aria-expanded={open}
         className={cn(
-          'inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors',
+          'inline-flex items-center gap-1.5 sm:gap-2 rounded-full px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-bold uppercase tracking-wider transition-colors',
           baseColors.track,
           variant === 'dark' ? 'text-white' : 'text-primary-navy',
         )}
       >
         <Home size={14} className={baseColors.chevron} />
-        <span className="max-w-[140px] truncate">{activeName || 'Select property'}</span>
+        <span className="max-w-[100px] sm:max-w-[140px] truncate whitespace-nowrap">{activeName || 'Select property'}</span>
         <ChevronDown size={14} className={cn('transition-transform', open && 'rotate-180')} />
       </button>
       <AnimatePresence>
@@ -144,20 +164,20 @@ export const PropertyToggle: React.FC<PropertyToggleProps> = ({
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.12 }}
             className={cn(
-              'absolute end-0 mt-2 min-w-[200px] rounded-2xl py-1.5 z-50 overflow-hidden',
+              'absolute end-0 mt-2 min-w-[180px] rounded-2xl py-1.5 z-50 overflow-hidden',
               baseColors.menuBg,
             )}
           >
             {properties.map(p => {
               const isActive = p.id === activePropertyId;
-              const label = bl(p.name as any, lang);
+              const label = shortPropertyLabel(bl(p.name as any, lang));
               return (
                 <li key={p.id} role="option" aria-selected={isActive}>
                   <button
                     type="button"
                     onClick={() => { setActivePropertyId(p.id); setOpen(false); }}
                     className={cn(
-                      'w-full text-start px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-colors',
+                      'w-full text-start px-4 py-2.5 text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors',
                       isActive ? baseColors.menuItemActive : baseColors.menuItem,
                     )}
                   >

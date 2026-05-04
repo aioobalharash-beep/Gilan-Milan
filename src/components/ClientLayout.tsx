@@ -7,12 +7,14 @@ import { useTranslation } from 'react-i18next';
 import { LanguageToggle } from './LanguageToggle';
 import { PropertyToggle } from './PropertyToggle';
 import { Footer } from './Footer';
+import { getClientConfig } from '../config/clientConfig';
 
 export const ClientLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, isAdmin, logout } = useAuth();
   const { t } = useTranslation();
+  const config = getClientConfig();
 
   const navItems = [
     { path: '/', labelKey: 'nav.home', icon: Home },
@@ -32,15 +34,28 @@ export const ClientLayout: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-pearl-white flex flex-col">
-      {/* Client Top Bar */}
-      <header className="fixed top-0 w-full z-50 bg-pearl-white/90 backdrop-blur-xl shadow-[0px_10px_30px_rgba(1,31,54,0.04)] px-6 h-16 flex items-center justify-between">
+      {/* Client Top Bar — single row that scales from a logo-only tile on
+          phones to the full chalet wordmark from md upwards. The brand lockup
+          is allowed to shrink/truncate so the property toggle never overflows. */}
+      <header className="fixed top-0 w-full z-50 bg-pearl-white/90 backdrop-blur-xl shadow-[0px_10px_30px_rgba(1,31,54,0.04)] px-3 sm:px-6 h-16 flex items-center justify-between gap-2">
         <Link
           to="/"
-          className="font-headline text-xl font-bold text-primary-navy tracking-widest uppercase"
+          aria-label={config.chaletName}
+          className="flex items-center gap-2 min-w-0 shrink"
         >
-          {t('common.alMalak')}
+          {config.logoPath && (
+            <img
+              src={config.logoPath}
+              alt=""
+              className="h-9 w-9 rounded-md object-contain bg-white/60 p-0.5 shrink-0"
+              onError={(e) => { (e.currentTarget.style.display = 'none'); }}
+            />
+          )}
+          <span className="hidden md:inline font-headline text-xl font-bold text-primary-navy tracking-widest uppercase truncate">
+            {t('common.alMalak')}
+          </span>
         </Link>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           <PropertyToggle variant="light" />
           <LanguageToggle />
           {isAdmin && (
@@ -48,6 +63,7 @@ export const ClientLayout: React.FC = () => {
               onClick={() => navigate('/admin')}
               className="p-2 rounded-full hover:bg-primary-navy/5 text-primary-navy/40 transition-colors"
               title={t('nav.adminPortal')}
+              aria-label={t('nav.adminPortal')}
             >
               <ShieldCheck size={20} />
             </button>
@@ -55,8 +71,9 @@ export const ClientLayout: React.FC = () => {
           {user ? (
             <button
               onClick={handleLogout}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl hover:bg-primary-navy/5 text-primary-navy transition-colors text-xs font-bold uppercase tracking-wider"
+              className="flex items-center gap-2 p-2 sm:px-4 sm:py-2 rounded-xl hover:bg-primary-navy/5 text-primary-navy transition-colors text-xs font-bold uppercase tracking-wider"
               title={t('nav.logout')}
+              aria-label={t('nav.logout')}
             >
               <LogOut size={18} />
               <span className="hidden sm:inline">{t('nav.logout')}</span>
@@ -64,7 +81,9 @@ export const ClientLayout: React.FC = () => {
           ) : (
             <button
               onClick={() => navigate('/login')}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary-navy text-white text-xs font-bold uppercase tracking-wider hover:opacity-90 transition-opacity"
+              className="flex items-center gap-2 p-2 sm:px-4 sm:py-2 rounded-xl bg-primary-navy text-white text-xs font-bold uppercase tracking-wider hover:opacity-90 transition-opacity"
+              title={t('nav.login')}
+              aria-label={t('nav.login')}
             >
               <LogIn size={18} />
               <span className="hidden sm:inline">{t('nav.login')}</span>

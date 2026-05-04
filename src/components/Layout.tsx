@@ -251,19 +251,21 @@ export const Layout: React.FC = () => {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Bar */}
-        <header className="sticky top-0 z-40 bg-pearl-white/80 backdrop-blur-xl border-b border-primary-navy/5 h-16 flex items-center justify-between px-6 md:px-8">
-          <div className="flex items-center gap-4">
-            <button onClick={() => setMobileOpen(true)} className="md:hidden p-2 rounded-full hover:bg-primary-navy/5">
+        {/* Top Bar — kept to a single row on mobile by hiding the user name
+            block, shrinking gaps, and letting the property toggle render its
+            mobile (compact) layout. */}
+        <header className="sticky top-0 z-40 bg-pearl-white/80 backdrop-blur-xl border-b border-primary-navy/5 h-16 flex items-center justify-between px-3 sm:px-6 md:px-8 gap-2">
+          <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+            <button onClick={() => setMobileOpen(true)} className="md:hidden p-2 rounded-full hover:bg-primary-navy/5 shrink-0" aria-label="Open menu">
               <Menu size={20} />
             </button>
-            <Link to="/" className="md:hidden hover:text-secondary-gold transition-colors">
+            <Link to="/" className="md:hidden hover:text-secondary-gold transition-colors shrink-0" aria-label="Home">
               <BrandMark variant="light" size="sm" />
             </Link>
-            <h2 className="hidden md:block text-xl font-bold font-headline capitalize">{t(currentLabel)}</h2>
+            <h2 className="hidden md:block text-xl font-bold font-headline capitalize truncate">{t(currentLabel)}</h2>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5 sm:gap-4 shrink-0">
             {/* Active property selector — scopes admin views (calendar, bookings, edit) to one chalet */}
             <PropertyToggle variant="light" />
             <div className="relative" ref={notifRef}>
@@ -327,12 +329,15 @@ export const Layout: React.FC = () => {
                 </div>
               )}
             </div>
-            <div className="hidden sm:flex items-center gap-3 ps-4 border-s border-primary-navy/10">
+            {/* User name block — only on md+ where there's room. The mobile
+                hamburger drawer already shows account actions (logout, view
+                portal) so the avatar isn't critical here. */}
+            <div className="hidden md:flex items-center gap-3 ps-4 border-s border-primary-navy/10">
               <div className="text-end">
-                <p className="text-xs font-bold">{user?.name || 'Admin'}</p>
+                <p className="text-xs font-bold truncate max-w-[140px]">{user?.name || 'Admin'}</p>
                 <p className="text-[10px] text-primary-navy/50 uppercase font-bold">{t('common.curator')}</p>
               </div>
-              <div className="w-8 h-8 rounded-full bg-primary-navy/10 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-full bg-primary-navy/10 flex items-center justify-center shrink-0">
                 <Users size={16} />
               </div>
             </div>
