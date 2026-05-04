@@ -6,9 +6,28 @@ const ADMIN_TOKENS_COLLECTION = 'admin_tokens';
 
 // VAPID public key is safe to ship in the bundle — it's the public half of the
 // Web Push certificate pair. The private half stays in Firebase.
-const VAPID_KEY =
+//
+// Configure per-project via the VITE_FIREBASE_VAPID_KEY env var (Project
+// Settings → Cloud Messaging → Web Push certificates → Key pair). The bundled
+// fallback is only useful for the original template's Firebase project; any
+// new deployment must override it or push registration will fail.
+const RAW_VAPID_KEY =
   (import.meta.env.VITE_FIREBASE_VAPID_KEY as string | undefined) ||
   'BErsSKwySJ84fE7jBwq1BoZvkowA7qb-8TFaP1V1PQfOTlyWgbeDdvMZTJltugbZ2ij40Z4l7_PKRHsuGlaw5-O';
+
+// Strip whitespace and surrounding quotes that sometimes survive from a copy
+// out of the Firebase Console or from a poorly-pasted env var value.
+const VAPID_KEY = (RAW_VAPID_KEY || '')
+  .trim()
+  .replace(/^['"]|['"]$/g, '')
+  .replace(/\s+/g, '');
+
+// Web Push P-256 public keys are 65 bytes uncompressed → 87 chars unpadded
+// base64url, or 88 with a single trailing `=`. Reject anything else early so
+// we surface a clear configuration error instead of FCM's generic "The string
+// contains invalid characters".
+const VAPID_KEY_LOOKS_VALID =
+  /^[A-Za-z0-9_-]{86,88}=?$/.test(VAPID_KEY);
 
 let messagingInstance: Messaging | null = null;
 
@@ -35,7 +54,16 @@ export type PushPermissionResult =
   | { status: 'denied' }
   | { status: 'default' }
   | { status: 'unsupported' }
+  | { status: 'not-configured' }
   | { status: 'error'; error: string };
+
+/**
+ * True only when push is wired up enough to attempt enabling. Use this to
+ * decide whether to render the "Enable notifications" prompt at all.
+ */
+export function isPushConfigured(): boolean {
+  return VAPID_KEY_LOOKS_VALID;
+}
 
 /**
  * Requests browser notification permission, fetches the FCM token, and
@@ -46,8 +74,13 @@ export async function enableAdminPushNotifications(
 ): Promise<PushPermissionResult> {
   try {
     if (!('Notification' in window)) return { status: 'unsupported' };
-    if (!VAPID_KEY) {
-      return { status: 'error', error: 'Missing VITE_FIREBASE_VAPID_KEY' };
+    if (!VAPID_KEY) return { status: 'not-configured' };
+    if (!VAPID_KEY_LOOKS_VALID) {
+      console.warn(
+        'enableAdminPushNotifications: VITE_FIREBASE_VAPID_KEY is malformed',
+        { length: VAPID_KEY.length },
+      );
+      return { status: 'not-configured' };
     }
 
     const messaging = await getMessagingInstance();
@@ -58,10 +91,23 @@ export async function enableAdminPushNotifications(
     if (permission !== 'granted') return { status: 'default' };
 
     const swReg = await registerFcmServiceWorker();
-    const token = await getToken(messaging, {
-      vapidKey: VAPID_KEY,
-      serviceWorkerRegistration: swReg || undefined,
-    });
+    let token: string;
+    try {
+      token = await getToken(messaging, {
+        vapidKey: VAPID_KEY,
+        serviceWorkerRegistration: swReg || undefined,
+      });
+    } catch (tokenErr) {
+      const msg = tokenErr instanceof Error ? tokenErr.message : String(tokenErr);
+      // FCM throws "The string to be decoded contains invalid characters"
+      // (or similar) when the VAPID key isn't valid base64url for the
+      // current Firebase project. Surface this as a configuration issue
+      // rather than a scary technical error.
+      if (/invalid characters|applicationServerKey|Failed to execute 'subscribe'/i.test(msg)) {
+        return { status: 'not-configured' };
+      }
+      throw tokenErr;
+    }
 
     if (!token) return { status: 'error', error: 'Empty FCM token' };
 
