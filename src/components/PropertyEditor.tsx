@@ -231,19 +231,37 @@ const PropertyEditorComponent: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePropertyId]);
 
+  // Firestore rejects documents containing `undefined` values. The form has
+  // optional fields (event_rate, discount, etc.) that may legitimately be
+  // unset, so we deep-strip undefined keys before writing. Arrays are
+  // preserved index-by-index — `null` is left in place.
+  const stripUndefined = (value: any): any => {
+    if (Array.isArray(value)) return value.map(stripUndefined);
+    if (value && typeof value === 'object' && value.constructor === Object) {
+      const out: Record<string, any> = {};
+      for (const [k, v] of Object.entries(value)) {
+        if (v === undefined) continue;
+        out[k] = stripUndefined(v);
+      }
+      return out;
+    }
+    return value;
+  };
+
   const persistForm = async () => {
+    const sanitized = stripUndefined(form);
     // Per-property settings doc holds long-form editor content.
-    await setDoc(doc(db, 'settings', propertyDetailsDocId(activePropertyId!)), form);
+    await setDoc(doc(db, 'settings', propertyDetailsDocId(activePropertyId!)), sanitized);
     // Mirror toggle-facing fields back onto the property record so the
     // PropertyToggle and Sanctuary header reflect saved name/gallery edits.
-    await propertiesApi.update(activePropertyId!, {
+    await propertiesApi.update(activePropertyId!, stripUndefined({
       name: form.name,
       capacity: form.capacity,
       area_sqm: form.area_sqm,
       nightly_rate: form.nightly_rate,
       description: bl(form.description as any, 'en'),
       images: form.gallery.map(g => ({ url: g.url, label: g.label || '' })),
-    });
+    }));
   };
 
   const handleSave = async () => {
