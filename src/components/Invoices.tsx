@@ -5,6 +5,7 @@ import { cn } from '@/src/lib/utils';
 import { collection, query, orderBy, where, onSnapshot, doc, getDoc, setDoc, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { generateVATReportPDF } from '../services/vatReport';
+import { downloadInvoicePDF } from '../services/pdf';
 import type { Invoice } from '../types';
 import { useTranslation } from 'react-i18next';
 import { getClientConfig, whatsappHref } from '../config/clientConfig';
@@ -257,8 +258,32 @@ export const Invoices: React.FC = () => {
     setSelectedBooking(null);
   };
 
-  const handlePrint = () => {
-    window.print();
+  // Generate a real PDF download instead of relying on window.print(). Mobile
+  // browsers (especially iOS Safari) often refuse to open the print dialog
+  // when called from inside a modal, leaving the user with a blank screen or
+  // an empty preview. A jsPDF download works identically on phones, tablets,
+  // and desktop — saved to Files on iOS, Downloads on Android, and the
+  // download bar on desktop.
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const handlePrint = async () => {
+    if (!selectedInvoice) {
+      window.print();
+      return;
+    }
+    setPdfBusy(true);
+    try {
+      await downloadInvoicePDF(
+        {
+          ...selectedInvoice,
+          chaletName: config.chaletName,
+          adminName: config.admin.name,
+          licenseNumber,
+        },
+        i18n.language,
+      );
+    } finally {
+      setPdfBusy(false);
+    }
   };
 
   const nonCancelledBookings = bookings.filter(b => b.status !== 'cancelled');
@@ -759,10 +784,15 @@ export const Invoices: React.FC = () => {
                 {/* Primary action — large, full-width tap target for mobile owners */}
                 <button
                   onClick={handlePrint}
-                  className="w-full min-h-[56px] flex items-center justify-center gap-3 bg-primary-navy text-white rounded-2xl font-bold text-sm uppercase tracking-wider shadow-lg shadow-primary-navy/20 active:scale-[0.98] hover:bg-primary-navy/90 transition-all"
+                  disabled={pdfBusy}
+                  className="w-full min-h-[56px] flex items-center justify-center gap-3 bg-primary-navy text-white rounded-2xl font-bold text-sm uppercase tracking-wider shadow-lg shadow-primary-navy/20 active:scale-[0.98] hover:bg-primary-navy/90 transition-all disabled:opacity-60"
                 >
-                  <Printer size={20} />
-                  {i18n.language === 'ar' ? 'طباعة / حفظ PDF' : 'Print / Save as PDF'}
+                  {pdfBusy
+                    ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    : <Printer size={20} />}
+                  {pdfBusy
+                    ? (i18n.language === 'ar' ? 'جارٍ الإنشاء…' : 'Generating…')
+                    : (i18n.language === 'ar' ? 'تحميل PDF' : 'Download PDF')}
                 </button>
                 {selectedBooking && (
                   <button

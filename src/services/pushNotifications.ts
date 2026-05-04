@@ -66,6 +66,28 @@ export function isPushConfigured(): boolean {
 }
 
 /**
+ * Detects iOS Safari running outside an installed PWA. On iOS, Web Push only
+ * works when the site has been added to the Home Screen — the Notification
+ * API itself is missing in regular Safari tabs. This lets the dashboard show
+ * a "Install to Home Screen first" hint instead of a broken Enable button.
+ */
+export function isIosNeedsHomeScreen(): boolean {
+  if (typeof navigator === 'undefined' || typeof window === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  // iPhone, iPod, or modern iPadOS (which reports as Mac with touch).
+  const isIos =
+    /iPad|iPhone|iPod/.test(ua) ||
+    (ua.includes('Mac') && 'ontouchend' in document);
+  if (!isIos) return false;
+  // Standalone PWA (installed to Home Screen).
+  const isStandalone =
+    (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+    // Legacy Safari flag
+    (window.navigator as any).standalone === true;
+  return !isStandalone;
+}
+
+/**
  * Requests browser notification permission, fetches the FCM token, and
  * persists it under admin_tokens/{token} so the backend can fan out pushes.
  */

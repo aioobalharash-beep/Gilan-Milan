@@ -116,8 +116,11 @@ export const Confirmation: React.FC = () => {
         chaletName: config.chaletName,
         adminName: config.admin.name,
       }, lang);
-      const blobUrl = pdfDoc.output('bloburl');
-      window.open(blobUrl as string, '_blank');
+      // window.open(blobUrl) is unreliable on mobile (popup blocker, iOS
+      // Safari refusing blob: URLs in new tabs). pdfDoc.save() triggers a
+      // real download, which iOS handles by saving to Files / opening in
+      // the system PDF viewer, and desktop handles via the download bar.
+      pdfDoc.save(`Gilan-Milan-Invoice-${booking.id.slice(0, 8).toUpperCase()}.pdf`);
     } catch (err) {
       console.error('[Confirmation] Failed to generate invoice PDF:', err);
       alert(lang === 'ar' ? 'حدث خطأ أثناء إنشاء الفاتورة.' : 'Failed to generate invoice.');
@@ -202,9 +205,9 @@ export const Confirmation: React.FC = () => {
               <div className="flex justify-between items-start text-xs">
                 <div>
                   <span className="text-primary-navy/50">{t('confirmation.securityDeposit')}</span>
-                  <p className="text-[9px] font-bold uppercase tracking-widest text-primary-navy/40 mt-0.5">{t('booking.dueOnArrival')}</p>
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-primary-navy/40 mt-0.5">{t('booking.refundable')}</p>
                 </div>
-                <span className="font-bold text-primary-navy/40">{deposit} {t('common.omr')}</span>
+                <span className="font-bold text-primary-navy">{deposit} {t('common.omr')}</span>
               </div>
             )}
             <div className="flex justify-between text-sm pt-2 border-t border-primary-navy/5">
