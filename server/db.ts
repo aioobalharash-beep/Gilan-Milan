@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = path.join(__dirname, '..', 'woody-chalete.db');
+const dbPath = path.join(__dirname, '..', 'Gilan-Milan.db');
 
 const db = new Database(dbPath);
 
@@ -115,7 +115,7 @@ function seedData() {
 
   // Users
   db.prepare(`INSERT INTO users (id, name, email, password, role, phone) VALUES (?, ?, ?, ?, ?, ?)`).run(
-    'u1', 'Woody Chalete Admin', 'akwakhhwwdyman@gmail.com', passwordHash, 'admin', '+968 7921 0323'
+    'u1', 'Gilan & Milan Chalet Admin', 'mgilan.om@gmail.com', passwordHash, 'admin', '+968 9888 5926'
   );
   db.prepare(`INSERT INTO users (id, name, email, password, role, phone) VALUES (?, ?, ?, ?, ?, ?)`).run(
     'u2', 'Salim Al-Harthy', 'salim@guest.com', clientHash, 'client', '+968 9200 0002'
@@ -123,7 +123,7 @@ function seedData() {
 
   // Properties
   const properties = [
-    ['p1', 'Woody Chalete', 'Luxury Chalet', 12, 850, 120, 50, 'Premium luxury chalet'],
+    ['p1', 'Gilan & Milan Chalet', 'Luxury Chalet', 12, 850, 120, 50, 'Premium luxury chalet'],
     ['p2', 'Al-Bustan Villa', 'Deluxe Villa', 8, 620, 180, 75, 'Exclusive beachfront villa'],
     ['p3', 'Royal Suite A', 'Royal Suite', 4, 320, 250, 100, 'Opulent royal suite with private pool'],
     ['p4', 'Coast View Chalet', 'Ocean Chalet', 6, 480, 150, 60, 'Stunning ocean view chalet'],

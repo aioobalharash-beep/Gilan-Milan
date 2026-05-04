@@ -1,11 +1,11 @@
 {
-  "name": "Woody Chalete",
-  "short_name": "Woody",
+  "name": "Gilan & Milan Chalet",
+  "short_name": "Gilan & Milan",
   "description": "Luxury chalet booking and management",
   "start_url": "/",
   "display": "standalone",
-  "theme_color": "#1C3A2A",
-  "background_color": "#F2E8D5",
+  "theme_color": "#5C3D1E",
+  "background_color": "#F0EBE4",
   "orientation": "portrait-primary",
   "icons": [
     {

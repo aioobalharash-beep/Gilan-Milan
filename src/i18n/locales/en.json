@@ -16,7 +16,7 @@
     "adminPortal": "Admin Portal"
   },
   "common": {
-    "alMalak": "Woody Chalete",
+    "alMalak": "Gilan & Milan Chalet",
     "luxuryDesertSanctuary": "Luxury Chalet",
     "curator": "Curator",
     "notifications": "Notifications",
@@ -101,7 +101,7 @@
   },
   "guests": {
     "guestManagement": "Guest Management",
-    "curatingHospitality": "Curating hospitality for Woody Chalete",
+    "curatingHospitality": "Curating hospitality for Gilan & Milan Chalet",
     "pendingApproval": "Pending Approval",
     "upcomingArrivals": "Upcoming Arrivals",
     "checkedIn": "Checked In",
@@ -282,11 +282,11 @@
     "feedbackHelps": "Your feedback helps us craft the perfect retreat experience at {{name}}.",
     "placeholderName": "e.g. Ahmed Al-Said",
     "placeholderStayDetails": "e.g. March 2026, 3 nights",
-    "placeholderExperience": "Tell us about your stay at Woody Chalete..."
+    "placeholderExperience": "Tell us about your stay at Gilan & Milan Chalet..."
   },
   "confirmation": {
     "bookingConfirmed": "Booking Confirmed!",
-    "thankYou": "Thank you for choosing Woody Chalete",
+    "thankYou": "Thank you for choosing Gilan & Milan Chalet",
     "bookingDetails": "Booking Details",
     "property": "Property",
     "guest": "Guest",
@@ -339,8 +339,8 @@
     "propertyDetails": "Property Details",
     "propertyName": "Property Name",
     "propertyNameAr": "Property Name (Arabic)",
-    "propertyNamePlaceholder": "e.g. Woody Chalete",
-    "propertyNameArPlaceholder": "e.g. شاليه وودي",
+    "propertyNamePlaceholder": "e.g. Gilan & Milan Chalet",
+    "propertyNameArPlaceholder": "e.g. شاليه جيلان وميلان",
     "capacityGuests": "Capacity (Guests)",
     "areaM2": "Area (m²)",
     "dynamicPricing": "Dynamic Pricing",
@@ -393,7 +393,7 @@
     "bankName": "Bank Name",
     "bankNamePlaceholder": "e.g. Bank Muscat",
     "accountName": "Account Name",
-    "accountNamePlaceholder": "e.g. Woody Chalete LLC",
+    "accountNamePlaceholder": "e.g. Gilan & Milan Chalet LLC",
     "ibanAccount": "IBAN / Account Number",
     "ibanPlaceholder": "e.g. OM12 0123 ...",
     "bankPhone": "Phone Number (for Mobile Transfer)",
@@ -403,7 +403,7 @@
     "aboutHint": "Long-form story shown on the public About page. Separate paragraphs with a blank line.",
     "aboutEnglish": "About (English)",
     "aboutArabic": "About (Arabic)",
-    "aboutPlaceholderEn": "e.g.\nWoody Chalete is a luxury retreat nestled in the heart of Oman...\n\nEvery detail has been curated for the modern traveler...",
+    "aboutPlaceholderEn": "e.g.\nGilan & Milan Chalet is a luxury retreat nestled in the heart of Oman...\n\nEvery detail has been curated for the modern traveler...",
     "aboutPlaceholderAr": "اكتب نص ‘من نحن’ بالعربية...",
     "charsCount": "{{count}} characters",
     "aboutEmptyEn": "Leave blank to show the default About text.",
