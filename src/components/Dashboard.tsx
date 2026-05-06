@@ -117,6 +117,26 @@ export const Dashboard: React.FC = () => {
       .finally(() => setLoading(false));
   }, [user]);
 
+  // Fire-and-forget inbound iCal sync whenever the admin opens the dashboard,
+  // throttled to once every 5 minutes per browser to avoid hammering OTA
+  // servers (Booking.com etc. occasionally rate-limit). The endpoint also
+  // runs as a daily Vercel cron (vercel.json) for the case where no admin
+  // is logged in for a stretch.
+  useEffect(() => {
+    const SYNC_THROTTLE_KEY = 'lastIcalSyncMs';
+    const SYNC_INTERVAL_MS = 5 * 60 * 1000;
+    try {
+      const last = Number(localStorage.getItem(SYNC_THROTTLE_KEY) || 0);
+      if (Date.now() - last < SYNC_INTERVAL_MS) return;
+      localStorage.setItem(SYNC_THROTTLE_KEY, String(Date.now()));
+    } catch {
+      // localStorage may be disabled (private browsing) — fall through and
+      // let the request run.
+    }
+    fetch('/api/ical/sync', { method: 'POST', keepalive: true })
+      .catch((err) => console.warn('Background iCal sync skipped:', err));
+  }, []);
+
   // Single source of truth: onSnapshot on 'bookings' collection — filtered to
   // the active property so dashboard stats reflect the chalet currently in
   // focus. Switching the property toggle re-subscribes automatically.

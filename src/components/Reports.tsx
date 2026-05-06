@@ -79,6 +79,9 @@ export const Reports: React.FC = () => {
     const results = allBookings.filter(b => {
       if (b.status === 'cancelled') return false;
       if (b.status !== 'confirmed' && b.status !== 'checked-in') return false;
+      // Skip externally-mirrored bookings (Booking.com / Massarah / Airbnb)
+      // since their revenue is collected on the OTA's side, not ours.
+      if ((b as any).source === 'external_ical') return false;
       return b.check_in >= startDate && b.check_in <= endDate;
     }).sort((a, b) => a.check_in.localeCompare(b.check_in));
     setFilteredBookings(results);

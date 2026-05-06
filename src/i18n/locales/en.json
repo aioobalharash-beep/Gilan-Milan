@@ -468,10 +468,20 @@
     "saving": "Saving...",
     "changesSaved": "Changes saved",
     "icalSyncTitle": "Calendar Sync (iCal)",
+    "icalOutboundLabel": "Share with other platforms",
     "icalSyncHint": "Paste this URL into Booking.com, Massarah, Airbnb, or any iCal-compatible calendar so confirmed bookings here automatically block those dates on the other platform.",
     "icalCopy": "Copy URL",
     "icalCopied": "Copied",
-    "icalPrivacyNote": "The feed only shares dates and reservation status — never guest names, contact info, or booking amounts."
+    "icalPrivacyNote": "The feed only shares dates and reservation status — never guest names, contact info, or booking amounts.",
+    "icalInboundLabel": "Pull bookings from other platforms",
+    "icalInboundHint": "Add the iCal URL each platform exposes for this chalet. We re-fetch them daily, on every dashboard load, and whenever you tap Sync now — booked dates from those platforms are automatically blocked here.",
+    "icalLabelPlaceholder": "e.g. Booking.com",
+    "icalAdd": "Add Feed",
+    "icalSyncNow": "Sync now",
+    "icalSyncing": "Syncing…",
+    "icalSyncOk": "Imported {{imported}} · pruned {{pruned}}",
+    "icalNoFeeds": "No inbound feeds yet — add one above.",
+    "icalInboundNote": "Save Changes after adding or removing feeds so the daily background sync picks them up."
   },
   "reports": {
     "financialReports": "Financial Reports",

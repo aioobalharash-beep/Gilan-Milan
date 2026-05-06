@@ -67,6 +67,13 @@ interface PropertyDetails {
   aboutAr: string;
   termsEn: string;
   termsAr: string;
+  /**
+   * URLs the inbound iCal poller should pull from (Booking.com, Massarah,
+   * Airbnb, etc.). Each feed is mirrored into the bookings collection as
+   * source='external_ical' so the calendar/availability check blocks those
+   * dates without admin action.
+   */
+  inbound_ical_feeds?: { label: string; url: string }[];
 }
 
 const DEFAULT_PRICING: PricingSettings = {
@@ -112,34 +119,54 @@ const DEFAULT_DATA: PropertyDetails = {
   aboutAr: '',
   termsEn: '',
   termsAr: '',
+  inbound_ical_feeds: [],
 };
 
 const baseInputClass = "w-full bg-pearl-white border border-primary-navy/10 rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-secondary-gold/50 outline-none";
 
+interface InboundFeed { label: string; url: string }
+
 /**
- * Read-only panel that surfaces this property's outbound iCal feed URL so the
- * admin can paste it into Booking.com / Massarah / Airbnb to publish blocked
- * dates. The URL is derived from the current origin so it works on whichever
- * Vercel deployment the admin is logged into. A small Copy button covers the
- * common case (mobile clipboards make text-selection in inputs annoying).
+ * Two-way iCal sync panel.
+ *
+ * Outbound: read-only feed URL the admin pastes into Booking.com / Massarah
+ * / Airbnb to expose this chalet's blocked dates.
+ *
+ * Inbound: list of OTA feed URLs we poll and mirror into the bookings
+ * collection as source='external_ical' so the in-app availability calendar
+ * also blocks dates booked elsewhere.
+ *
+ * The inbound list lives on the per-property settings doc and is saved by
+ * the regular Save Changes flow. A "Sync now" button hits /api/ical/sync
+ * directly so the admin gets immediate feedback after pasting a new URL.
  */
-const ICalSyncPanel: React.FC<{ propertyId: string | null }> = ({ propertyId }) => {
+const ICalSyncPanel: React.FC<{
+  propertyId: string | null;
+  feeds: InboundFeed[];
+  onChange: (feeds: InboundFeed[]) => void;
+}> = ({ propertyId, feeds, onChange }) => {
   const { t } = useTranslation();
   const [copied, setCopied] = React.useState(false);
+  const [syncing, setSyncing] = React.useState(false);
+  const [syncResult, setSyncResult] = React.useState<
+    null | { ok: true; imported: number; pruned: number; failed: number }
+    | { ok: false; error: string }
+  >(null);
+  const [draftLabel, setDraftLabel] = React.useState('');
+  const [draftUrl, setDraftUrl] = React.useState('');
 
   if (!propertyId) return null;
   if (typeof window === 'undefined') return null;
 
-  const url = `${window.location.origin}/api/ical/${propertyId}.ics`;
+  const outboundUrl = `${window.location.origin}/api/ical/${propertyId}.ics`;
 
   const handleCopy = async () => {
     try {
       if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(url);
+        await navigator.clipboard.writeText(outboundUrl);
       } else {
-        // Older Safari fallback — temporary hidden textarea + execCommand.
         const ta = document.createElement('textarea');
-        ta.value = url;
+        ta.value = outboundUrl;
         ta.style.position = 'fixed';
         ta.style.opacity = '0';
         document.body.appendChild(ta);
@@ -154,51 +181,219 @@ const ICalSyncPanel: React.FC<{ propertyId: string | null }> = ({ propertyId }) 
     }
   };
 
+  const addFeed = () => {
+    const label = draftLabel.trim() || 'External';
+    const url = draftUrl.trim();
+    if (!url || !/^https?:\/\//i.test(url)) return;
+    onChange([...feeds, { label, url }]);
+    setDraftLabel('');
+    setDraftUrl('');
+  };
+
+  const removeFeed = (idx: number) => {
+    onChange(feeds.filter((_, i) => i !== idx));
+  };
+
+  const updateFeed = (idx: number, patch: Partial<InboundFeed>) => {
+    onChange(feeds.map((f, i) => (i === idx ? { ...f, ...patch } : f)));
+  };
+
+  const handleSyncNow = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const resp = await fetch(`/api/ical/sync?propertyId=${encodeURIComponent(propertyId)}`, {
+        method: 'POST',
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        setSyncResult({ ok: false, error: json?.error || `Sync failed (${resp.status})` });
+      } else {
+        const summary = (json.properties && json.properties[0]) || json;
+        setSyncResult({
+          ok: true,
+          imported: Number(summary.imported || summary.delivered || 0),
+          pruned: Number(summary.pruned || 0),
+          failed: Number(summary.failed || 0),
+        });
+      }
+    } catch (err) {
+      setSyncResult({ ok: false, error: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
-    <section className="bg-white rounded-[20px] p-6 border border-primary-navy/5 shadow-sm space-y-4">
+    <section className="bg-white rounded-[20px] p-6 border border-primary-navy/5 shadow-sm space-y-5">
       <div className="flex items-center gap-2">
         <Calendar size={16} className="text-secondary-gold" />
         <h3 className="text-sm font-bold text-primary-navy uppercase tracking-wide">
           {t('propertyEditor.icalSyncTitle', 'Calendar Sync (iCal)')}
         </h3>
       </div>
-      <p className="text-[10px] text-primary-navy/40 font-medium leading-relaxed">
-        {t(
-          'propertyEditor.icalSyncHint',
-          'Paste this URL into Booking.com, Massarah, Airbnb, or any iCal-compatible calendar so confirmed bookings here automatically block those dates on the other platform.',
-        )}
-      </p>
-      <div className="flex flex-col sm:flex-row gap-2">
-        <input
-          type="text"
-          value={url}
-          readOnly
-          dir="ltr"
-          onFocus={(e) => e.currentTarget.select()}
-          className="flex-1 bg-pearl-white border border-primary-navy/10 rounded-xl py-3 px-4 text-xs font-mono focus:ring-1 focus:ring-secondary-gold/50 outline-none text-primary-navy"
-        />
-        <button
-          type="button"
-          onClick={handleCopy}
-          className={cn(
-            'inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-3 text-[11px] font-bold uppercase tracking-widest transition-colors shrink-0',
-            copied
-              ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
-              : 'bg-primary-navy text-white hover:opacity-90',
+
+      {/* ── Outbound feed ───────────────────────────────────────────────── */}
+      <div className="space-y-3">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">
+            {t('propertyEditor.icalOutboundLabel', 'Share with other platforms')}
+          </p>
+          <p className="text-[10px] text-primary-navy/40 font-medium leading-relaxed mt-1">
+            {t(
+              'propertyEditor.icalSyncHint',
+              'Paste this URL into Booking.com, Massarah, Airbnb, or any iCal-compatible calendar so confirmed bookings here automatically block those dates on the other platform.',
+            )}
+          </p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input
+            type="text"
+            value={outboundUrl}
+            readOnly
+            dir="ltr"
+            onFocus={(e) => e.currentTarget.select()}
+            className="flex-1 bg-pearl-white border border-primary-navy/10 rounded-xl py-3 px-4 text-xs font-mono focus:ring-1 focus:ring-secondary-gold/50 outline-none text-primary-navy"
+          />
+          <button
+            type="button"
+            onClick={handleCopy}
+            className={cn(
+              'inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-3 text-[11px] font-bold uppercase tracking-widest transition-colors shrink-0',
+              copied
+                ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+                : 'bg-primary-navy text-white hover:opacity-90',
+            )}
+          >
+            {copied ? <Check size={14} /> : null}
+            {copied
+              ? t('propertyEditor.icalCopied', 'Copied')
+              : t('propertyEditor.icalCopy', 'Copy URL')}
+          </button>
+        </div>
+        <p className="text-[10px] text-primary-navy/40 font-medium leading-relaxed">
+          {t(
+            'propertyEditor.icalPrivacyNote',
+            'The feed only shares dates and reservation status — never guest names, contact info, or booking amounts.',
           )}
-        >
-          {copied ? <Check size={14} /> : null}
-          {copied
-            ? t('propertyEditor.icalCopied', 'Copied')
-            : t('propertyEditor.icalCopy', 'Copy URL')}
-        </button>
+        </p>
       </div>
-      <p className="text-[10px] text-primary-navy/40 font-medium leading-relaxed">
-        {t(
-          'propertyEditor.icalPrivacyNote',
-          'The feed only shares dates and reservation status — never guest names, contact info, or booking amounts.',
+
+      <div className="border-t border-primary-navy/5" />
+
+      {/* ── Inbound feeds ───────────────────────────────────────────────── */}
+      <div className="space-y-3">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-secondary-gold">
+            {t('propertyEditor.icalInboundLabel', 'Pull bookings from other platforms')}
+          </p>
+          <p className="text-[10px] text-primary-navy/40 font-medium leading-relaxed mt-1">
+            {t(
+              'propertyEditor.icalInboundHint',
+              'Add the iCal URL each platform exposes for this chalet. We re-fetch them daily, on every dashboard load, and whenever you tap Sync now — booked dates from those platforms are automatically blocked here.',
+            )}
+          </p>
+        </div>
+
+        {feeds.length > 0 && (
+          <div className="space-y-2">
+            {feeds.map((feed, idx) => (
+              <div
+                key={idx}
+                className="flex flex-col sm:flex-row gap-2 bg-pearl-white rounded-xl p-3 border border-primary-navy/5"
+              >
+                <input
+                  type="text"
+                  value={feed.label}
+                  onChange={(e) => updateFeed(idx, { label: e.target.value })}
+                  placeholder={t('propertyEditor.icalLabelPlaceholder', 'e.g. Booking.com')}
+                  className="sm:w-40 bg-white border border-primary-navy/10 rounded-lg py-2 px-3 text-xs font-bold focus:ring-1 focus:ring-secondary-gold/50 outline-none"
+                />
+                <input
+                  type="url"
+                  dir="ltr"
+                  value={feed.url}
+                  onChange={(e) => updateFeed(idx, { url: e.target.value })}
+                  placeholder="https://…"
+                  className="flex-1 bg-white border border-primary-navy/10 rounded-lg py-2 px-3 text-xs font-mono focus:ring-1 focus:ring-secondary-gold/50 outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeFeed(idx)}
+                  aria-label="Remove feed"
+                  className="self-end sm:self-center text-primary-navy/30 hover:text-red-500 transition-colors p-2 shrink-0"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
         )}
-      </p>
+
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input
+            type="text"
+            value={draftLabel}
+            onChange={(e) => setDraftLabel(e.target.value)}
+            placeholder={t('propertyEditor.icalLabelPlaceholder', 'e.g. Booking.com')}
+            className="sm:w-40 bg-pearl-white border border-primary-navy/10 rounded-xl py-2.5 px-4 text-xs font-bold focus:ring-1 focus:ring-secondary-gold/50 outline-none"
+          />
+          <input
+            type="url"
+            dir="ltr"
+            value={draftUrl}
+            onChange={(e) => setDraftUrl(e.target.value)}
+            placeholder="https://…"
+            onKeyDown={(e) => e.key === 'Enter' && addFeed()}
+            className="flex-1 bg-pearl-white border border-primary-navy/10 rounded-xl py-2.5 px-4 text-xs font-mono focus:ring-1 focus:ring-secondary-gold/50 outline-none"
+          />
+          <button
+            type="button"
+            onClick={addFeed}
+            disabled={!draftUrl.trim()}
+            className="inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest bg-primary-navy/5 text-primary-navy/70 hover:bg-primary-navy/10 transition-colors disabled:opacity-40 shrink-0"
+          >
+            <Plus size={14} /> {t('propertyEditor.icalAdd', 'Add Feed')}
+          </button>
+        </div>
+
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 pt-1">
+          <button
+            type="button"
+            onClick={handleSyncNow}
+            disabled={syncing || feeds.length === 0}
+            className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest bg-secondary-gold/15 text-primary-navy hover:bg-secondary-gold/25 transition-colors disabled:opacity-40"
+          >
+            {syncing
+              ? <div className="w-3.5 h-3.5 border-2 border-primary-navy/30 border-t-primary-navy rounded-full animate-spin" />
+              : <Calendar size={14} />}
+            {syncing
+              ? t('propertyEditor.icalSyncing', 'Syncing…')
+              : t('propertyEditor.icalSyncNow', 'Sync now')}
+          </button>
+          {syncResult && syncResult.ok && (
+            <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">
+              {t('propertyEditor.icalSyncOk', 'Imported {{imported}} · pruned {{pruned}}', syncResult)}
+            </p>
+          )}
+          {syncResult && !syncResult.ok && (
+            <p className="text-[10px] font-medium text-red-600 break-all">
+              {syncResult.error}
+            </p>
+          )}
+          {feeds.length === 0 && (
+            <p className="text-[10px] font-medium text-primary-navy/40">
+              {t('propertyEditor.icalNoFeeds', 'No inbound feeds yet — add one above.')}
+            </p>
+          )}
+        </div>
+        <p className="text-[10px] text-primary-navy/40 font-medium leading-relaxed">
+          {t(
+            'propertyEditor.icalInboundNote',
+            'Save Changes after adding or removing feeds so the daily background sync picks them up.',
+          )}
+        </p>
+      </div>
     </section>
   );
 };
@@ -1088,8 +1283,12 @@ const PropertyEditorComponent: React.FC = () => {
         )}
       </section>
 
-      {/* iCal Sync — outbound feed */}
-      <ICalSyncPanel propertyId={activePropertyId} />
+      {/* iCal Sync — outbound feed + inbound feed list */}
+      <ICalSyncPanel
+        propertyId={activePropertyId}
+        feeds={form.inbound_ical_feeds || []}
+        onChange={(feeds) => setForm((prev) => ({ ...prev, inbound_ical_feeds: feeds }))}
+      />
 
       {/* Bank Transfer Details */}
       <section className="bg-white rounded-[20px] p-6 border border-primary-navy/5 shadow-sm space-y-5">

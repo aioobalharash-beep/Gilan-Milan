@@ -286,7 +286,10 @@ export const Invoices: React.FC = () => {
     }
   };
 
-  const nonCancelledBookings = bookings.filter(b => b.status !== 'cancelled');
+  // Hide externally-mirrored bookings from the invoice list — they're owned
+  // by the source OTA (Booking.com, Massarah, etc.) and we can't issue tax
+  // invoices for them.
+  const nonCancelledBookings = bookings.filter(b => b.status !== 'cancelled' && (b as any).source !== 'external_ical');
   const lastSixMonths = getLastSixMonths();
 
   if (loading) return <div className="p-8 animate-pulse"><div className="h-96 bg-primary-navy/5 rounded-xl" /></div>;
