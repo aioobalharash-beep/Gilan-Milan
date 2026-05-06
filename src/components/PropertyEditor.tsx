@@ -116,6 +116,93 @@ const DEFAULT_DATA: PropertyDetails = {
 
 const baseInputClass = "w-full bg-pearl-white border border-primary-navy/10 rounded-xl py-3 px-4 text-sm font-medium focus:ring-1 focus:ring-secondary-gold/50 outline-none";
 
+/**
+ * Read-only panel that surfaces this property's outbound iCal feed URL so the
+ * admin can paste it into Booking.com / Massarah / Airbnb to publish blocked
+ * dates. The URL is derived from the current origin so it works on whichever
+ * Vercel deployment the admin is logged into. A small Copy button covers the
+ * common case (mobile clipboards make text-selection in inputs annoying).
+ */
+const ICalSyncPanel: React.FC<{ propertyId: string | null }> = ({ propertyId }) => {
+  const { t } = useTranslation();
+  const [copied, setCopied] = React.useState(false);
+
+  if (!propertyId) return null;
+  if (typeof window === 'undefined') return null;
+
+  const url = `${window.location.origin}/api/ical/${propertyId}.ics`;
+
+  const handleCopy = async () => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        // Older Safari fallback — temporary hidden textarea + execCommand.
+        const ta = document.createElement('textarea');
+        ta.value = url;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Clipboard write failed:', err);
+    }
+  };
+
+  return (
+    <section className="bg-white rounded-[20px] p-6 border border-primary-navy/5 shadow-sm space-y-4">
+      <div className="flex items-center gap-2">
+        <Calendar size={16} className="text-secondary-gold" />
+        <h3 className="text-sm font-bold text-primary-navy uppercase tracking-wide">
+          {t('propertyEditor.icalSyncTitle', 'Calendar Sync (iCal)')}
+        </h3>
+      </div>
+      <p className="text-[10px] text-primary-navy/40 font-medium leading-relaxed">
+        {t(
+          'propertyEditor.icalSyncHint',
+          'Paste this URL into Booking.com, Massarah, Airbnb, or any iCal-compatible calendar so confirmed bookings here automatically block those dates on the other platform.',
+        )}
+      </p>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <input
+          type="text"
+          value={url}
+          readOnly
+          dir="ltr"
+          onFocus={(e) => e.currentTarget.select()}
+          className="flex-1 bg-pearl-white border border-primary-navy/10 rounded-xl py-3 px-4 text-xs font-mono focus:ring-1 focus:ring-secondary-gold/50 outline-none text-primary-navy"
+        />
+        <button
+          type="button"
+          onClick={handleCopy}
+          className={cn(
+            'inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-3 text-[11px] font-bold uppercase tracking-widest transition-colors shrink-0',
+            copied
+              ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+              : 'bg-primary-navy text-white hover:opacity-90',
+          )}
+        >
+          {copied ? <Check size={14} /> : null}
+          {copied
+            ? t('propertyEditor.icalCopied', 'Copied')
+            : t('propertyEditor.icalCopy', 'Copy URL')}
+        </button>
+      </div>
+      <p className="text-[10px] text-primary-navy/40 font-medium leading-relaxed">
+        {t(
+          'propertyEditor.icalPrivacyNote',
+          'The feed only shares dates and reservation status — never guest names, contact info, or booking amounts.',
+        )}
+      </p>
+    </section>
+  );
+};
+
 const PropertyEditorComponent: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -1000,6 +1087,9 @@ const PropertyEditorComponent: React.FC = () => {
           </motion.div>
         )}
       </section>
+
+      {/* iCal Sync — outbound feed */}
+      <ICalSyncPanel propertyId={activePropertyId} />
 
       {/* Bank Transfer Details */}
       <section className="bg-white rounded-[20px] p-6 border border-primary-navy/5 shadow-sm space-y-5">

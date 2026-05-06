@@ -466,7 +466,12 @@
     "addNewSection": "Add New Section +",
     "saveChanges": "Save Changes",
     "saving": "Saving...",
-    "changesSaved": "Changes saved"
+    "changesSaved": "Changes saved",
+    "icalSyncTitle": "Calendar Sync (iCal)",
+    "icalSyncHint": "Paste this URL into Booking.com, Massarah, Airbnb, or any iCal-compatible calendar so confirmed bookings here automatically block those dates on the other platform.",
+    "icalCopy": "Copy URL",
+    "icalCopied": "Copied",
+    "icalPrivacyNote": "The feed only shares dates and reservation status — never guest names, contact info, or booking amounts."
   },
   "reports": {
     "financialReports": "Financial Reports",
